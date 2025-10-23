@@ -1,12 +1,53 @@
 name: CI
-on: [pull_request]
+
+on:
+  push:
+    branches:
+      - main
+      - 'feature/**'
+  pull_request:
+    branches:
+      - main
+
 jobs:
-  test:
+  build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/hpe-partsurfer
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: '3.11' }
-      - run: |
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          if [ -d tests ]; then pytest -q; else echo "no tests"; fi
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: apps/hpe-partsurfer/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Generate sample results
+        run: npm run sample
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: apps/hpe-partsurfer/coverage
+
+      - name: Upload sample results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sample-results
+          path: apps/hpe-partsurfer/artifacts/sample-results.csv
