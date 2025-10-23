@@ -1,0 +1,4 @@
+part_number,description,image_url,source_page,status
+511778-001,HPE Cable Kit,https://partsurfer.hpe.com/images/cable.jpg,Search,ok
+AF573A,HPE Rack Rail Kit,https://partsurfer.hpe.com/images/rail.jpg,Photo,ok
+123456-B21,HPE Enclosure,https://partsurfer.hpe.com/images/enclosure.jpg,Search,no_bom

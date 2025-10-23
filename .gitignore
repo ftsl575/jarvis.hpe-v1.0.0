@@ -1,0 +1,6 @@
+node_modules/
+coverage/
+apps/hpe-partsurfer/node_modules/
+apps/hpe-partsurfer/coverage/
+apps/hpe-partsurfer/artifacts/*.tmp
+.DS_Store
