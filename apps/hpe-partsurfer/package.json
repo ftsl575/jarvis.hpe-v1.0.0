@@ -1,0 +1,24 @@
+{
+  "name": "hpe-partsurfer",
+  "version": "1.0.0",
+  "description": "Utilities for parsing HPE PartSurfer part numbers.",
+  "main": "src/index.js",
+  "scripts": {
+    "lint": "eslint .",
+    "test": "jest --coverage",
+    "sample": "node src/cli.js --input sample_parts.txt --out sample_results.csv"
+  },
+  "keywords": [
+    "hpe",
+    "partsurfer"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0"
+  },
+  "jest": {
+    "testEnvironment": "node"
+  }
+}
