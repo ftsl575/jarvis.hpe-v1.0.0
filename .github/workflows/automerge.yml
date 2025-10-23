@@ -1,0 +1,17 @@
+name: automerge
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  merge:
+    if: contains(github.event.pull_request.labels.*.name, 'codex')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: pascalgn/automerge-action@v0.16.3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MERGE_METHOD: squash
+          MERGE_LABELS: codex

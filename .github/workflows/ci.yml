@@ -1,0 +1,12 @@
+name: CI
+on: [pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: |
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -d tests ]; then pytest -q; else echo "no tests"; fi
