@@ -1,5 +1,5 @@
 import { load } from 'cheerio';
-import { absolutizeUrl, normalizeWhitespace } from './html.js';
+import { absolutizeUrl, collapseWhitespace, normalizeText } from './normalize.js';
 
 const DESCRIPTION_SELECTORS = [
   '#ctl00_mainContent_lblShortDescription',
@@ -43,6 +43,14 @@ const NO_PHOTO_PATTERNS = [
   /we are unable to find an image/i
 ];
 
+function isPlaceholderUrl(url) {
+  if (!url) {
+    return true;
+  }
+
+  return /imagenotfound|placeholder|noimage/i.test(url);
+}
+
 function extractText($, element) {
   if (!element || element.length === 0) {
     return '';
@@ -50,10 +58,10 @@ function extractText($, element) {
 
   const nodeName = element.get(0)?.name?.toLowerCase();
   if (nodeName === 'meta') {
-    return normalizeWhitespace(element.attr('content'));
+    return normalizeText(element.attr('content'));
   }
 
-  return normalizeWhitespace(element.text());
+  return normalizeText(element.text());
 }
 
 function findFirstText($, selectors) {
@@ -85,7 +93,7 @@ function extractImage($) {
       }
 
       const absolute = absolutizeUrl(normalized);
-      if (absolute) {
+      if (absolute && !isPlaceholderUrl(absolute)) {
         const resolvedElement = element.is('meta') ? null : element;
         return { url: absolute, element: resolvedElement };
       }
@@ -96,7 +104,7 @@ function extractImage($) {
   if (link && link.length > 0) {
     const href = link.attr('href');
     const absolute = absolutizeUrl(href);
-    if (absolute) {
+    if (absolute && !isPlaceholderUrl(absolute)) {
       return { url: absolute, element: link };
     }
   }
@@ -132,11 +140,11 @@ function extractCaption($, imageElement) {
 function findFallbackDescription($) {
   const labeled = $('body')
     .find('p, span, div, strong')
-    .filter((_, el) => /^description\s*:/i.test(normalizeWhitespace($(el).text())))
+    .filter((_, el) => /^description\s*:/i.test(normalizeText($(el).text())))
     .first();
 
   if (labeled && labeled.length > 0) {
-    const text = normalizeWhitespace(labeled.text());
+    const text = normalizeText(labeled.text());
     const match = text.match(/^description\s*:\s*(.+)$/i);
     if (match && match[1]) {
       return match[1].trim();
@@ -147,7 +155,7 @@ function findFallbackDescription($) {
 }
 
 function isNotFound($) {
-  const bodyText = normalizeWhitespace($('body').text());
+  const bodyText = collapseWhitespace($('body').text());
   return NO_PHOTO_PATTERNS.some((pattern) => pattern.test(bodyText));
 }
 
