@@ -15,6 +15,20 @@ const DESCRIPTION_SELECTORS = [
   'meta[name="description"]'
 ];
 
+const CATEGORY_SELECTORS = [
+  '#ctl00_BodyContentPlaceHolder_lblCategory',
+  '#ctl00_BodyContentPlaceHolder_lblProductCategory',
+  '#ctl00_BodyContentPlaceHolder_lblProductLine',
+  '.ps-part-summary__category',
+  '.ps-part-summary__meta',
+  '.ps-part-summary__meta-value',
+  '.ps-part-summary__subtitle',
+  '.ps-part-meta__category',
+  '.ps-field-category',
+  'meta[name="product:category"]',
+  'meta[property="og:category"]'
+];
+
 const BOM_CONTAINER_SELECTORS = [
   '#ctl00_BodyContentPlaceHolder_gvBom',
   '#ctl00_BodyContentPlaceHolder_lvBom',
@@ -62,6 +76,20 @@ const BOM_NEGATIVE_PATTERNS = [
 ];
 
 const IMAGE_ATTRIBUTE_CANDIDATES = ['data-large', 'data-original', 'data-src', 'src', 'content'];
+
+function stripCategoryLabel(value) {
+  if (!value) {
+    return '';
+  }
+
+  const normalized = normalizeWhitespace(value);
+  const match = normalized.match(/category\s*(?:[:\-]|is)?\s*(.+)/i);
+  if (match && match[1]) {
+    return match[1].trim();
+  }
+
+  return normalized;
+}
 
 function extractText($, element) {
   if (!element || element.length === 0) {
@@ -280,6 +308,92 @@ function findDescription($) {
   return null;
 }
 
+function findCategoryFromPairs($) {
+  const containerSelectors = [
+    '.ps-field',
+    '.ps-part-summary__meta',
+    '.ps-part-summary__detail',
+    '.ps-attribute',
+    '.ps-detail-row',
+    '.ps-part-attribute',
+    '.field-row',
+    '.part-summary__row'
+  ];
+
+  for (const selector of containerSelectors) {
+    const container = $(selector);
+    if (!container || container.length === 0) {
+      continue;
+    }
+
+    let result = null;
+    container.each((_, element) => {
+      const wrapper = $(element);
+      const label = wrapper.find('.ps-field-label, .field-label, .ps-label, .label, .heading, .ps-part-attribute__label').first();
+      const value = wrapper.find('.ps-field-value, .field-value, .ps-value, .value, .content, .ps-part-attribute__value').first();
+      const labelText = normalizeWhitespace(label.text());
+      if (/category/i.test(labelText)) {
+        const valueText = stripCategoryLabel(value.text());
+        if (valueText) {
+          result = valueText;
+          return false;
+        }
+      }
+
+      return undefined;
+    });
+
+    if (result) {
+      return result;
+    }
+  }
+
+  const dt = $('dt').filter((_, el) => /category/i.test(normalizeWhitespace($(el).text()))).first();
+  if (dt && dt.length > 0) {
+    const dd = dt.nextAll('dd').filter((_, el) => normalizeWhitespace($(el).text()).length > 0).first();
+    const value = stripCategoryLabel(dd.text());
+    if (value) {
+      return value;
+    }
+  }
+
+  const labelElement = $('span, strong, label, div, th, td').filter((_, el) => {
+    const text = normalizeWhitespace($(el).text());
+    return /^category:?$/i.test(text) || /^category\s*:/i.test(text);
+  }).first();
+
+  if (labelElement && labelElement.length > 0) {
+    const value = extractSiblingValue($, labelElement);
+    if (value) {
+      return stripCategoryLabel(value);
+    }
+  }
+
+  return null;
+}
+
+function findCategory($) {
+  const direct = findFirstText($, CATEGORY_SELECTORS);
+  if (direct) {
+    return stripCategoryLabel(direct);
+  }
+
+  const fromPairs = findCategoryFromPairs($);
+  if (fromPairs) {
+    return fromPairs;
+  }
+
+  const metaTag = $('meta[name="product:category"], meta[property="og:category"], meta[name="category"], meta[name="product-category"]').first();
+  if (metaTag && metaTag.length > 0) {
+    const content = stripCategoryLabel(metaTag.attr('content'));
+    if (content) {
+      return content;
+    }
+  }
+
+  return null;
+}
+
 function detectNoResults($) {
   const text = normalizeWhitespace($('body').text());
   return NO_RESULTS_PATTERNS.some((pattern) => pattern.test(text));
@@ -369,21 +483,23 @@ function extractImageUrl($) {
 
 export function parseSearch(html) {
   if (!html) {
-    return { description: null, bomPresent: false, imageUrl: null };
+    return { description: null, category: null, bomPresent: false, imageUrl: null };
   }
 
   const $ = load(html);
 
   if (detectNoResults($)) {
-    return { description: null, bomPresent: false, imageUrl: null };
+    return { description: null, category: null, bomPresent: false, imageUrl: null };
   }
 
   const description = findDescription($);
+  const category = findCategory($);
   const bomPresent = detectBomPresence($);
   const imageUrl = extractImageUrl($);
 
   return {
     description: description || null,
+    category: category || null,
     bomPresent,
     imageUrl
   };

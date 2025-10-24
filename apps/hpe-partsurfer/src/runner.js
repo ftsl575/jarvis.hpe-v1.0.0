@@ -29,6 +29,7 @@ export async function runForPart(partNumber, options = {}) {
 
   let description = null;
   let imageUrl = null;
+  let category = null;
   let sourcePage = mode;
   let status = 'not_found';
 
@@ -38,9 +39,13 @@ export async function runForPart(partNumber, options = {}) {
     const searchHtml = await getSearchHtml(normalized, fetchOptions);
     const searchResult = parseSearch(searchHtml);
     const hasDescription = Boolean(searchResult.description);
+    if (searchResult.category) {
+      category = searchResult.category;
+    }
 
     if (hasDescription) {
       description = searchResult.description;
+      category = searchResult.category ?? null;
       imageUrl = searchResult.imageUrl ?? null;
       status = searchResult.bomPresent ? 'ok' : 'no_bom';
       sourcePage = 'Search';
@@ -80,12 +85,31 @@ export async function runForPart(partNumber, options = {}) {
       status = 'not_found';
       imageUrl = null;
       sourcePage = 'Photo';
+
+      if (live) {
+        try {
+          const searchHtml = await getSearchHtml(normalized, fetchOptions);
+          const searchResult = parseSearch(searchHtml);
+          if (searchResult.description) {
+            description = searchResult.description;
+          }
+          if (searchResult.category) {
+            category = searchResult.category;
+          }
+        } catch (error) {
+          log.warn('Fallback search after missing photo failed', {
+            partNumber: normalized,
+            message: error?.message
+          });
+        }
+      }
     }
   }
 
   const result = {
     part_number: normalized,
     description,
+    category: category ?? null,
     image_url: imageUrl ?? null,
     source_page: sourcePage,
     status
