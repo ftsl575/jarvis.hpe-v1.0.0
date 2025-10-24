@@ -84,13 +84,17 @@ async function main() {
   log.info('CLI processing', { count: normalizedParts.length, live });
   const rows = await runBatch(normalizedParts, { live });
 
-  const header = ['part_number', 'description', 'image_url', 'source_page', 'status'];
+  const header = ['part_number', 'description', 'image_url', 'source_page', 'status', 'replaced_by', 'substitute', 'bom_count', 'compatible_count'];
   const csvLines = [header, ...rows.map((row) => [
     toCsvValue(row.part_number),
     toCsvValue(row.description),
     toCsvValue(row.image_url),
     toCsvValue(row.source_page),
-    toCsvValue(row.status)
+    toCsvValue(row.status),
+    toCsvValue(row.replaced_by),
+    toCsvValue(row.substitute),
+    toCsvValue(row.bom_count),
+    toCsvValue(row.compatible_count)
   ])].map((cols) => cols.join(','));
 
   await fs.writeFile(outputPath, `${csvLines.join('\n')}\n`, 'utf8');
