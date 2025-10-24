@@ -36,3 +36,8 @@
 4. Тесты: nock‑бэки для fetch и покрытие сценариев ok / no_bom / not_found; интеграционные тесты API.
 5. Документация обновлена: режимы, схема вывода, примеры.
 6. Следующий шаг: .env + логирование запросов (прокси, таймауты, ретраи) и Dockerfile.
+
+## 2025-10-25 — Windows sample runner with Excel export
+1. Добавлен сценарий `scripts/windows/run_sample_parts_excel.bat` для живой проверки CLI на Windows.
+2. Скрипт создаёт CSV, перекодирует его в формат с точкой с запятой и экспортирует результат в Excel через `QueryTables`.
+3. Добавлена документация по финальному тестовому прогону в `apps/hpe-partsurfer/docs/final_test_runner_windows.md`.
