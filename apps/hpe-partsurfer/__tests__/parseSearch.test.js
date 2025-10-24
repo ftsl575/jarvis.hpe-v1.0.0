@@ -11,39 +11,86 @@ function loadFixture(name) {
 }
 
 describe('parseSearch', () => {
-  test('extracts description, image, and BOM presence', () => {
-    const html = loadFixture('search_ok.html');
+  test('parses OKN page with BOM items', () => {
+    const html = loadFixture('search_okn.html');
     const result = parseSearch(html);
 
     expect(result).toEqual({
-      description: 'ProLiant DL380 Gen10 Fan Kit',
-      category: 'Cooling - Fans',
-      bomPresent: true,
-      imageUrl: 'https://partsurfer.hpe.com/assets/images/parts/511778-001_large.jpg'
+      description: 'HPE ProLiant OKN Fan Module',
+      category: 'Cooling Modules',
+      imageUrl: 'https://partsurfer.hpe.com/media/photos/okn1234a_large.jpg',
+      bomItems: [
+        { partNumber: 'OKN2001', description: 'Primary Fan Cartridge' },
+        { partNumber: 'OKN2002', description: 'Secondary Airflow Baffle' }
+      ],
+      compatibleProducts: [],
+      replacedBy: null,
+      substitute: null,
+      multipleResults: false,
+      notFound: false,
+      bomSectionFound: true,
+      bomUnavailable: false
     });
   });
 
-  test('handles valid page without BOM', () => {
-    const html = loadFixture('search_no_bom.html');
-    const result = parseSearch(html);
-
-    expect(result).toEqual({
-      description: 'System Board Assembly',
-      category: 'System Boards',
-      bomPresent: false,
-      imageUrl: 'https://partsurfer.hpe.com/images/placeholders/system-board.png'
-    });
-  });
-
-  test('handles not-found pages', () => {
-    const html = loadFixture('search_not_found.html');
+  test('detects multi-match SKU search results', () => {
+    const html = loadFixture('search_sku.html');
     const result = parseSearch(html);
 
     expect(result).toEqual({
       description: null,
       category: null,
-      bomPresent: false,
-      imageUrl: null
+      imageUrl: null,
+      bomItems: [],
+      compatibleProducts: [],
+      replacedBy: null,
+      substitute: null,
+      multipleResults: true,
+      notFound: false,
+      bomSectionFound: false,
+      bomUnavailable: false
+    });
+  });
+
+  test('captures replacement relationships', () => {
+    const html = loadFixture('search_replaced.html');
+    const result = parseSearch(html);
+
+    expect(result).toEqual({
+      description: 'Legacy Power Supply Unit',
+      category: 'Power Supplies',
+      imageUrl: 'https://partsurfer.hpe.com/images/parts/legacy_supply.png',
+      bomItems: [],
+      compatibleProducts: [],
+      replacedBy: 'P04567-001',
+      substitute: 'P04568-001',
+      multipleResults: false,
+      notFound: false,
+      bomSectionFound: true,
+      bomUnavailable: true
+    });
+  });
+
+  test('collects compatible products', () => {
+    const html = loadFixture('search_compat.html');
+    const result = parseSearch(html);
+
+    expect(result).toEqual({
+      description: 'Rack Mounting Kit',
+      category: 'Rack Accessories',
+      imageUrl: null,
+      bomItems: [],
+      compatibleProducts: [
+        { partNumber: 'DL380-G10', description: 'ProLiant DL380 Gen10 Server' },
+        { partNumber: 'DL360-G10', description: 'ProLiant DL360 Gen10 Server' },
+        { partNumber: 'ML350-G10', description: 'ProLiant ML350 Gen10 Server' }
+      ],
+      replacedBy: null,
+      substitute: null,
+      multipleResults: false,
+      notFound: false,
+      bomSectionFound: false,
+      bomUnavailable: false
     });
   });
 });

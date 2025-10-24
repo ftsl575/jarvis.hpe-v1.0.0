@@ -21,6 +21,16 @@ describe('parsePhoto', () => {
     });
   });
 
+  test('ignores placeholder images', () => {
+    const html = loadFixture('photo_missing.html');
+    const result = parsePhoto(html);
+
+    expect(result).toEqual({
+      description: 'Optional Rack Rail Kit for ProLiant servers.',
+      imageUrl: null
+    });
+  });
+
   test('returns null values for missing parts', () => {
     const html = loadFixture('photo_not_found.html');
     const result = parsePhoto(html);
