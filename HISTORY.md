@@ -14,7 +14,7 @@
 8. Следующий шаг: реализовать HTTP-сервер и интеграцию с реальным парсером HPE PartSurfer.
 
 ## 2025-10-24 — HTTP API added
-1. Добавлен HTTP‑API сервер в `apps/hpe-partsurfer` на базе Express.
+1. Добавлен HTTP-API сервер в `apps/hpe-partsurfer` на базе Express.
 2. Эндпоинты:
    - `GET /health` → `{ ok: true }`
    - `GET /api/part?pn=XYZ` → `{ input, part_number, status }` (валидация PN).
@@ -32,8 +32,8 @@
    - Парсер ShowPhoto.aspx (картинка/краткое описание).
    - Автоопределение режима и fallback: при отсутствии BOM на Search — попытка Photo.
 2. Добавлен fetch-слой (axios) с таймаутом 10s и 2 ретраями, последовательное выполнение с троттлингом 1 req/с.
-3. Обновлены CLI и HTTP‑API: теперь возвращаются поля `{ part_number, description, image_url, source_page, status }`.
-4. Тесты: nock‑бэки для fetch и покрытие сценариев ok / no_bom / not_found; интеграционные тесты API.
+3. Обновлены CLI и HTTP-API: теперь возвращаются поля `{ part_number, description, image_url, source_page, status }`.
+4. Тесты: nock-бэки для fetch и покрытие сценариев ok / no_bom / not_found; интеграционные тесты API.
 5. Документация обновлена: режимы, схема вывода, примеры.
 6. Следующий шаг: .env + логирование запросов (прокси, таймауты, ретраи) и Dockerfile.
 
@@ -41,3 +41,19 @@
 1. Добавлен сценарий `scripts/windows/run_sample_parts_excel.bat` для живой проверки CLI на Windows.
 2. Скрипт создаёт CSV, перекодирует его в формат с точкой с запятой и экспортирует результат в Excel через `QueryTables`.
 3. Добавлена документация по финальному тестовому прогону в `apps/hpe-partsurfer/docs/final_test_runner_windows.md`.
+
+## Post-merge validation (fallback to Search when photo missing)
+- tests: OK
+- live: OK (QK733A, J9F43A)
+- dumps: photo_* + search_* present
+- csv: descriptions populated, image_url empty
+
+## v1.0.0-stable — October 2025
+- Стабильная работа CLI и API для поиска на HPE PartSurfer.
+- Поддерживаемые типы:
+  - Option Kit Numbers (XXXXXX-B21)
+  - SKU / Product Numbers (PXXXXX-B21, XXXXX-425)
+- Обработка Spare и Assembly частично реализована (тестовый режим).
+- Тесты 100% успешны (6/6 suites).
+- Реализован экспорт в Excel (.xlsx) с колонками.
+- Добавлен run_sample_parts.bat для Windows.
