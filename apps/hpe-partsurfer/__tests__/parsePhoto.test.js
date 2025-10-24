@@ -16,8 +16,8 @@ describe('parsePhoto', () => {
     const result = parsePhoto(html);
 
     expect(result).toEqual({
-      description: 'Accessory Kit',
-      imageUrl: '/images/kit.jpg'
+      description: 'Optional Rack Rail Kit for ProLiant servers.',
+      imageUrl: 'https://partsurfer.hpe.com/media/photos/af573a_large.jpg'
     });
   });
 

@@ -1,7 +1,68 @@
 import axios from 'axios';
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import config from './config.js';
 import { log } from './logger.js';
+
+const debugRoot = path.resolve(process.cwd(), config.DEBUG_DIR);
+let ensureDebugDirPromise;
+
+function safePartNumber(partNumber) {
+  if (typeof partNumber !== 'string' || partNumber.length === 0) {
+    return 'UNKNOWN';
+  }
+
+  return partNumber
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/gi, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'UNKNOWN';
+}
+
+function resolveDebugPath(filename) {
+  return path.join(debugRoot, filename);
+}
+
+function ensureDebugDir() {
+  if (!ensureDebugDirPromise) {
+    ensureDebugDirPromise = mkdir(debugRoot, { recursive: true }).catch((error) => {
+      log.warn('Unable to create debug directory', {
+        directory: debugRoot,
+        message: error?.message
+      });
+    });
+  }
+
+  return ensureDebugDirPromise;
+}
+
+async function saveDebugHtml(kind, partNumber, html) {
+  if (!config.DEBUG_SAVE_HTML || !html) {
+    return;
+  }
+
+  const safePn = safePartNumber(partNumber);
+  const filename = `${kind}_${safePn}.html`;
+  const targetPath = resolveDebugPath(filename);
+
+  try {
+    await ensureDebugDir();
+    await writeFile(targetPath, html, 'utf8');
+    log.info('Saved debug HTML snapshot', {
+      page: kind,
+      partNumber: safePn,
+      file: targetPath
+    });
+  } catch (error) {
+    log.warn('Failed to write debug HTML snapshot', {
+      page: kind,
+      partNumber: safePn,
+      file: targetPath,
+      message: error?.message
+    });
+  }
+}
 
 const client = axios.create({
   baseURL: 'https://partsurfer.hpe.com/',
@@ -49,7 +110,7 @@ function retryDelay(attempt) {
   return 300 * (3 ** attempt);
 }
 
-async function performGet(url, options) {
+async function performGet(url, options, debugInfo) {
   const live = resolvedLiveMode(options);
 
   if (!live) {
@@ -69,6 +130,13 @@ async function performGet(url, options) {
       });
       const size = Buffer.byteLength(response.data ?? '', 'utf8');
       log.info('Request succeeded', { url, status: response.status, bytes: size });
+
+      if (config.DEBUG_SAVE_HTML) {
+        const partNumber = debugInfo?.partNumber;
+        const kind = debugInfo?.kind ?? 'page';
+        await saveDebugHtml(kind, partNumber, response.data);
+      }
+
       return response.data;
     } catch (error) {
       lastError = error;
@@ -94,10 +162,16 @@ async function performGet(url, options) {
 
 export async function getSearchHtml(partNumber, options) {
   const params = new URLSearchParams({ SearchText: partNumber });
-  return performGet(`Search.aspx?${params.toString()}`, options);
+  return performGet(`Search.aspx?${params.toString()}`, options, {
+    kind: 'search',
+    partNumber
+  });
 }
 
 export async function getPhotoHtml(partNumber, options) {
   const params = new URLSearchParams({ partnumber: partNumber });
-  return performGet(`ShowPhoto.aspx?${params.toString()}`, options);
+  return performGet(`ShowPhoto.aspx?${params.toString()}`, options, {
+    kind: 'photo',
+    partNumber
+  });
 }

@@ -1,11 +1,39 @@
 <!DOCTYPE html>
 <html>
   <body>
-    <div id="ctl00_BodyContentPlaceHolder_lblPartDescription">Cooling Fan Assembly</div>
-    <img id="ctl00_BodyContentPlaceHolder_imgPart" src="/images/fan.jpg" />
-    <table id="ctl00_BodyContentPlaceHolder_gvBom">
-      <tr><th>Item</th><th>Description</th></tr>
-      <tr><td>1</td><td>Fan</td></tr>
-    </table>
+    <section id="ctl00_BodyContentPlaceHolder_partSummary" class="ps-part-summary">
+      <h1 class="ps-part-summary__title">
+        ProLiant DL380 Gen10 Fan Kit
+      </h1>
+      <div class="ps-part-summary__image">
+        <img
+          data-large="/assets/images/parts/511778-001_large.jpg"
+          src="/assets/images/parts/511778-001_thumb.jpg"
+          alt="Fan kit"
+        />
+      </div>
+      <div class="ps-field">
+        <span class="ps-field-label">Description</span>
+        <span class="ps-field-value">ProLiant DL380 Gen10 Fan Kit</span>
+      </div>
+    </section>
+
+    <section id="ctl00_BodyContentPlaceHolder_upBom">
+      <h2>Bill of Material</h2>
+      <table class="ps-bom-table">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td>Fan module assembly</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
   </body>
 </html>

@@ -16,9 +16,9 @@ describe('parseSearch', () => {
     const result = parseSearch(html);
 
     expect(result).toEqual({
-      description: 'Cooling Fan Assembly',
+      description: 'ProLiant DL380 Gen10 Fan Kit',
       bomPresent: true,
-      imageUrl: '/images/fan.jpg'
+      imageUrl: 'https://partsurfer.hpe.com/assets/images/parts/511778-001_large.jpg'
     });
   });
 
@@ -27,9 +27,9 @@ describe('parseSearch', () => {
     const result = parseSearch(html);
 
     expect(result).toEqual({
-      description: 'System board',
+      description: 'System Board Assembly',
       bomPresent: false,
-      imageUrl: null
+      imageUrl: 'https://partsurfer.hpe.com/images/placeholders/system-board.png'
     });
   });
 

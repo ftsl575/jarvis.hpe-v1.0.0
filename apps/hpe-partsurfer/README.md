@@ -70,6 +70,10 @@ Set `HPE_PROXY_URL` in `.env` when HPE PartSurfer must be accessed through an HT
 
 Structured logs are written to both stdout and the file declared by `LOG_FILE` (default `logs/app.log`). Choose verbosity via `LOG_LEVEL` (`debug`, `info`, `warn`, or `error`). The logger automatically creates the target directory when missing.
 
+### Debugging parsers (DEBUG_SAVE_HTML, DEBUG_DIR)
+
+Set `DEBUG_SAVE_HTML=true` to store the raw HTML returned by live PartSurfer requests. Files are written to the directory defined by `DEBUG_DIR` (defaults to `debug/` relative to the project root) with names such as `search_511778_001.html` or `photo_AF573A.html`. Snapshots are only produced when live mode is enabled, making it easier to capture real markup for parser adjustments without affecting offline CI runs.
+
 ## HTTP API
 
 Start the API locally:
