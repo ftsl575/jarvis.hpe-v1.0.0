@@ -57,3 +57,8 @@
 - Тесты 100% успешны (6/6 suites).
 - Реализован экспорт в Excel (.xlsx) с колонками.
 - Добавлен run_sample_parts.bat для Windows.
+## v1.1.0 – OKN/SKU Deep Parser
+- Расширен парсер Search.aspx и Photo.aspx
+- Добавлены normalization helpers
+- Обновлены тесты и фикстуры
+- Улучшен экспорт CSV/Excel
