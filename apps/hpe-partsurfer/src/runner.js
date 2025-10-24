@@ -27,74 +27,70 @@ export async function runForPart(partNumber, options = {}) {
 
   log.info('Processing part', { partNumber: normalized, mode, live });
 
-  let description = null;
-  let imageUrl = null;
-  let category = null;
-  let sourcePage = mode;
-  let status = 'not_found';
+  const result = {
+    part_number: normalized,
+    description: null,
+    category: null,
+    image_url: null,
+    source_page: mode,
+    status: 'not_found',
+    replaced_by: null,
+    substitute: null,
+    bom_count: 0,
+    compatible_count: 0
+  };
 
   const fetchOptions = { live };
+  let searchResult = null;
+  let searchParseError = null;
 
   if (mode === 'Search') {
     const searchHtml = await getSearchHtml(normalized, fetchOptions);
-    const searchResult = parseSearch(searchHtml);
-    const hasDescription = Boolean(searchResult.description);
-    if (searchResult.category) {
-      category = searchResult.category;
+    try {
+      searchResult = parseSearch(searchHtml);
+    } catch (error) {
+      searchParseError = error;
+      log.error('Failed to parse search HTML', {
+        partNumber: normalized,
+        message: error?.message
+      });
     }
 
-    if (hasDescription) {
-      description = searchResult.description;
-      category = searchResult.category ?? null;
-      imageUrl = searchResult.imageUrl ?? null;
-      status = searchResult.bomPresent ? 'ok' : 'no_bom';
-      sourcePage = 'Search';
-    }
-
-    const fallbackAllowed = FALLBACK_ELIGIBLE_PATTERN.test(normalized) && !SEARCH_ONLY_PATTERN.test(normalized);
-    const needsFallback = fallbackAllowed && (!hasDescription || searchResult.bomPresent === false);
-
-    if (needsFallback) {
-      log.debug('Falling back to photo lookup', { partNumber: normalized });
-      const photoResult = await fetchPhotoInfo(normalized, fetchOptions);
-      if (!hasDescription && photoResult.description) {
-        description = photoResult.description;
-        sourcePage = 'Photo';
-        status = 'ok';
+    if (searchResult) {
+      result.source_page = 'Search';
+      result.category = searchResult.category ?? null;
+      if (searchResult.imageUrl) {
+        result.image_url = searchResult.imageUrl;
       }
-
-      if (photoResult.imageUrl) {
-        imageUrl = photoResult.imageUrl;
+      if (searchResult.description) {
+        result.description = searchResult.description;
       }
-
-      if (!hasDescription && !photoResult.description) {
-        status = 'not_found';
-      }
-    } else if (!hasDescription) {
-      status = 'not_found';
+      result.replaced_by = searchResult.replacedBy ?? null;
+      result.substitute = searchResult.substitute ?? null;
+      result.bom_count = searchResult.bomItems.length;
+      result.compatible_count = searchResult.compatibleProducts.length;
     }
   } else {
     const photoResult = await fetchPhotoInfo(normalized, fetchOptions);
 
     if (photoResult.description) {
-      description = photoResult.description;
-      imageUrl = photoResult.imageUrl ?? null;
-      status = 'ok';
-      sourcePage = 'Photo';
+      result.description = photoResult.description;
+      result.image_url = photoResult.imageUrl ?? null;
+      result.source_page = 'Photo';
     } else {
-      status = 'not_found';
-      imageUrl = null;
-      sourcePage = 'Photo';
+      result.status = 'not_found';
+      result.image_url = null;
+      result.source_page = 'Photo';
 
       if (live) {
         try {
           const searchHtml = await getSearchHtml(normalized, fetchOptions);
           const searchResult = parseSearch(searchHtml);
           if (searchResult.description) {
-            description = searchResult.description;
+            result.description = searchResult.description;
           }
           if (searchResult.category) {
-            category = searchResult.category;
+            result.category = searchResult.category;
           }
         } catch (error) {
           log.warn('Fallback search after missing photo failed', {
@@ -106,14 +102,36 @@ export async function runForPart(partNumber, options = {}) {
     }
   }
 
-  const result = {
-    part_number: normalized,
-    description,
-    category: category ?? null,
-    image_url: imageUrl ?? null,
-    source_page: sourcePage,
-    status
-  };
+  const fallbackAllowed = FALLBACK_ELIGIBLE_PATTERN.test(normalized) && !SEARCH_ONLY_PATTERN.test(normalized);
+  const allowPhotoFallback = !searchResult?.multipleResults && fallbackAllowed;
+
+  if (mode === 'Search' && allowPhotoFallback && (!result.description || !result.image_url)) {
+    log.debug('Falling back to photo lookup', { partNumber: normalized });
+    const photoResult = await fetchPhotoInfo(normalized, fetchOptions);
+    if (!result.description && photoResult.description) {
+      result.description = photoResult.description;
+      result.source_page = 'Photo';
+    }
+    if (!result.image_url && photoResult.imageUrl) {
+      result.image_url = photoResult.imageUrl;
+    }
+  }
+
+  if (searchParseError) {
+    result.status = 'parse_error';
+  } else if (searchResult?.multipleResults) {
+    result.status = 'multi_match';
+  } else if (result.description) {
+    if (mode === 'Search' || searchResult) {
+      result.status = result.bom_count > 0 ? 'ok' : 'no_bom';
+    } else {
+      result.status = 'ok';
+    }
+  } else if (searchResult?.notFound) {
+    result.status = 'not_found';
+  } else {
+    result.status = 'not_found';
+  }
 
   log.info('Completed part', { partNumber: normalized, status: result.status, source: result.source_page });
 

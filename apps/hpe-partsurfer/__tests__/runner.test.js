@@ -25,46 +25,95 @@ afterAll(() => {
 });
 
 describe('runForPart', () => {
-  test('returns search result when BOM is present', async () => {
+  test('returns BOM data for OKN search', async () => {
     nock('https://partsurfer.hpe.com')
       .get('/Search.aspx')
-      .query({ SearchText: '511778-001' })
-      .reply(200, loadFixture('search_ok.html'));
+      .query({ SearchText: 'OKN1234-001' })
+      .reply(200, loadFixture('search_okn.html'));
 
-    const result = await runForPart('511778-001', { live: true });
+    const result = await runForPart('OKN1234-001', { live: true });
 
     expect(result).toEqual({
-      part_number: '511778-001',
-      description: 'ProLiant DL380 Gen10 Fan Kit',
-      category: 'Cooling - Fans',
-      image_url: 'https://partsurfer.hpe.com/assets/images/parts/511778-001_large.jpg',
+      part_number: 'OKN1234-001',
+      description: 'HPE ProLiant OKN Fan Module',
+      category: 'Cooling Modules',
+      image_url: 'https://partsurfer.hpe.com/media/photos/okn1234a_large.jpg',
       source_page: 'Search',
-      status: 'ok'
+      status: 'ok',
+      replaced_by: null,
+      substitute: null,
+      bom_count: 2,
+      compatible_count: 0
     });
   });
 
-  test('falls back to photo when search lacks BOM', async () => {
+  test('exposes replacement information when BOM is unavailable', async () => {
     nock('https://partsurfer.hpe.com')
       .get('/Search.aspx')
-      .query({ SearchText: '123456-001' })
-      .reply(200, loadFixture('search_no_bom.html'))
-      .get('/ShowPhoto.aspx')
-      .query({ partnumber: '123456-001' })
-      .reply(200, loadFixture('photo_ok.html'));
+      .query({ SearchText: 'P04500-001' })
+      .reply(200, loadFixture('search_replaced.html'));
 
-    const result = await runForPart('123456-001', { live: true });
+    const result = await runForPart('P04500-001', { live: true });
 
     expect(result).toEqual({
-      part_number: '123456-001',
-      description: 'System Board Assembly',
-      category: 'System Boards',
-      image_url: 'https://partsurfer.hpe.com/media/photos/af573a_large.jpg',
+      part_number: 'P04500-001',
+      description: 'Legacy Power Supply Unit',
+      category: 'Power Supplies',
+      image_url: 'https://partsurfer.hpe.com/images/parts/legacy_supply.png',
       source_page: 'Search',
-      status: 'no_bom'
+      status: 'no_bom',
+      replaced_by: 'P04567-001',
+      substitute: 'P04568-001',
+      bom_count: 0,
+      compatible_count: 0
     });
   });
 
-  test('returns not_found when neither source yields data', async () => {
+  test('flags multi-match SKU results', async () => {
+    nock('https://partsurfer.hpe.com')
+      .get('/Search.aspx')
+      .query({ SearchText: 'Q1A23-001' })
+      .reply(200, loadFixture('search_sku.html'));
+
+    const result = await runForPart('Q1A23-001', { live: true });
+
+    expect(result).toEqual({
+      part_number: 'Q1A23-001',
+      description: null,
+      category: null,
+      image_url: null,
+      source_page: 'Search',
+      status: 'multi_match',
+      replaced_by: null,
+      substitute: null,
+      bom_count: 0,
+      compatible_count: 0
+    });
+  });
+
+  test('counts compatible products', async () => {
+    nock('https://partsurfer.hpe.com')
+      .get('/Search.aspx')
+      .query({ SearchText: 'RACKKIT-123' })
+      .reply(200, loadFixture('search_compat.html'));
+
+    const result = await runForPart('RACKKIT-123', { live: true });
+
+    expect(result).toEqual({
+      part_number: 'RACKKIT-123',
+      description: 'Rack Mounting Kit',
+      category: 'Rack Accessories',
+      image_url: null,
+      source_page: 'Search',
+      status: 'no_bom',
+      replaced_by: null,
+      substitute: null,
+      bom_count: 0,
+      compatible_count: 3
+    });
+  });
+
+  test('returns not_found when no details exist', async () => {
     nock('https://partsurfer.hpe.com')
       .get('/Search.aspx')
       .query({ SearchText: '000000-001' })
@@ -81,7 +130,11 @@ describe('runForPart', () => {
       category: null,
       image_url: null,
       source_page: 'Search',
-      status: 'not_found'
+      status: 'not_found',
+      replaced_by: null,
+      substitute: null,
+      bom_count: 0,
+      compatible_count: 0
     });
   });
 
@@ -99,7 +152,11 @@ describe('runForPart', () => {
       category: null,
       image_url: 'https://partsurfer.hpe.com/media/photos/af573a_large.jpg',
       source_page: 'Photo',
-      status: 'ok'
+      status: 'ok',
+      replaced_by: null,
+      substitute: null,
+      bom_count: 0,
+      compatible_count: 0
     });
   });
 
@@ -120,7 +177,11 @@ describe('runForPart', () => {
       category: 'Rack Rail Kits',
       image_url: null,
       source_page: 'Photo',
-      status: 'not_found'
+      status: 'ok',
+      replaced_by: null,
+      substitute: null,
+      bom_count: 0,
+      compatible_count: 0
     });
   });
 });
@@ -129,22 +190,26 @@ describe('runBatch', () => {
   test('processes parts sequentially', async () => {
     nock('https://partsurfer.hpe.com')
       .get('/Search.aspx')
-      .query({ SearchText: '511778-001' })
-      .reply(200, loadFixture('search_ok.html'))
+      .query({ SearchText: 'OKN1234-001' })
+      .reply(200, loadFixture('search_okn.html'))
       .get('/ShowPhoto.aspx')
       .query({ partnumber: 'AF573A' })
       .reply(200, loadFixture('photo_ok.html'));
 
-    const rows = await runBatch(['511778-001', 'AF573A'], { live: true, throttleMs: 0 });
+    const rows = await runBatch(['OKN1234-001', 'AF573A'], { live: true, throttleMs: 0 });
 
     expect(rows).toEqual([
       {
-        part_number: '511778-001',
-        description: 'ProLiant DL380 Gen10 Fan Kit',
-        category: 'Cooling - Fans',
-        image_url: 'https://partsurfer.hpe.com/assets/images/parts/511778-001_large.jpg',
+        part_number: 'OKN1234-001',
+        description: 'HPE ProLiant OKN Fan Module',
+        category: 'Cooling Modules',
+        image_url: 'https://partsurfer.hpe.com/media/photos/okn1234a_large.jpg',
         source_page: 'Search',
-        status: 'ok'
+        status: 'ok',
+        replaced_by: null,
+        substitute: null,
+        bom_count: 2,
+        compatible_count: 0
       },
       {
         part_number: 'AF573A',
@@ -152,7 +217,11 @@ describe('runBatch', () => {
         category: null,
         image_url: 'https://partsurfer.hpe.com/media/photos/af573a_large.jpg',
         source_page: 'Photo',
-        status: 'ok'
+        status: 'ok',
+        replaced_by: null,
+        substitute: null,
+        bom_count: 0,
+        compatible_count: 0
       }
     ]);
   });
