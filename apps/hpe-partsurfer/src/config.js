@@ -52,6 +52,8 @@ function normalizeString(value) {
 
 const config = Object.freeze({
   LIVE_MODE: process.env.LIVE_MODE === 'true',
+  DEBUG_SAVE_HTML: process.env.DEBUG_SAVE_HTML === 'true',
+  DEBUG_DIR: normalizeString(process.env.DEBUG_DIR) ?? 'debug',
   TIMEOUT_MS: parseInteger(process.env.TIMEOUT_MS, 10_000),
   RETRIES: parseInteger(process.env.RETRIES, 2),
   THROTTLE_RPS: parseNumber(process.env.THROTTLE_RPS, 1),

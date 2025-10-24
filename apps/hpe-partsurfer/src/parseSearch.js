@@ -1,26 +1,83 @@
 import { load } from 'cheerio';
+import { absolutizeUrl, normalizeWhitespace } from './html.js';
 
 const DESCRIPTION_SELECTORS = [
   '#ctl00_BodyContentPlaceHolder_lblPartDescription',
   '#ctl00_BodyContentPlaceHolder_lblDescription',
-  '.ps-part-description',
-  'h1.part-description'
+  '#ctl00_BodyContentPlaceHolder_lblItemDescription',
+  '.ps-part-summary__title',
+  '.ps-part-summary h1',
+  '.ps-search-result__title',
+  '.result-title',
+  'h1.part-description',
+  'h1.ps-title',
+  'meta[property="og:title"]',
+  'meta[name="description"]'
 ];
 
-const BOM_SELECTORS = [
+const BOM_CONTAINER_SELECTORS = [
   '#ctl00_BodyContentPlaceHolder_gvBom',
   '#ctl00_BodyContentPlaceHolder_lvBom',
-  '.ps-bom'
+  '#ctl00_BodyContentPlaceHolder_upBom',
+  '.ps-bom',
+  '.ps-bom-table',
+  '.bom-table',
+  '[data-component="bom"]',
+  '[data-component*="bom"]',
+  'div[id*="Bom"]',
+  'section[id*="Bom"]',
+  'table[id*="Bom"]',
+  'div[class*="bom"]',
+  'section[class*="bom"]',
+  'table[class*="bom"]',
+  'ul[class*="bom"]'
 ];
 
 const IMAGE_SELECTORS = [
   '#ctl00_BodyContentPlaceHolder_imgPart',
+  '.ps-part-summary__image img',
+  '.ps-part-summary img',
+  '.ps-search-result img',
   'img.ps-part-image',
-  'img#partImage'
+  'img#partImage',
+  'meta[property="og:image"]'
 ];
 
+const NO_RESULTS_PATTERNS = [
+  /no results/i,
+  /did not return any records/i,
+  /no matches/i,
+  /could not find/i,
+  /unable to locate/i,
+  /not found/i
+];
+
+const BOM_NEGATIVE_PATTERNS = [
+  /bill of material is not available/i,
+  /bill of materials? not available/i,
+  /bom is not available/i,
+  /no bill of material/i,
+  /this product has no options/i,
+  /no options are associated/i
+];
+
+const IMAGE_ATTRIBUTE_CANDIDATES = ['data-large', 'data-original', 'data-src', 'src', 'content'];
+
 function extractText($, element) {
-  return $(element).text().trim();
+  if (!element || element.length === 0) {
+    return '';
+  }
+
+  const nodeName = element.get(0)?.name?.toLowerCase();
+  if (nodeName === 'meta') {
+    return normalizeWhitespace(element.attr('content'));
+  }
+
+  if (nodeName === 'input') {
+    return normalizeWhitespace(element.attr('value'));
+  }
+
+  return normalizeWhitespace(element.text());
 }
 
 function findFirstText($, selectors) {
@@ -37,47 +94,234 @@ function findFirstText($, selectors) {
   return null;
 }
 
-function detectFallbackDescription($) {
-  const candidates = [];
-
-  $('td,th,span,strong,p').each((_, el) => {
-    const text = extractText($, el);
-    if (!text) {
-      return;
+function findDescriptionFromTable($) {
+  const tables = $('table').toArray();
+  for (const tableElement of tables) {
+    const table = $(tableElement);
+    const id = table.attr('id') ?? '';
+    const className = table.attr('class') ?? '';
+    if (/(\bbom\b|bill\s*of\s*material)/i.test(`${id} ${className}`)) {
+      continue;
     }
 
-    const normalized = text.replace(/\s+/g, ' ').trim();
-    if (/^description\s*:/i.test(normalized)) {
-      const value = normalized.split(/:/, 2)[1];
-      if (value) {
-        candidates.push(value.trim());
+    let headers = table.find('thead th').toArray();
+    if (headers.length === 0) {
+      headers = table.find('tr').first().find('th').toArray();
+    }
+
+    if (headers.length === 0) {
+      continue;
+    }
+
+    let descriptionIndex = -1;
+    headers.forEach((header, index) => {
+      const headerText = normalizeWhitespace($(header).text());
+      if (descriptionIndex === -1 && /description/i.test(headerText)) {
+        descriptionIndex = index;
       }
+    });
+
+    if (descriptionIndex === -1) {
+      continue;
     }
-  });
 
-  return candidates.length > 0 ? candidates[0] : null;
-}
-
-function detectNoResults($) {
-  const bodyText = $('body').text().toLowerCase();
-  return bodyText.includes('no results found') || bodyText.includes('did not return any records');
-}
-
-function detectBomPresence($) {
-  for (const selector of BOM_SELECTORS) {
-    if ($(selector).find('tr,li').length > 0) {
-      return true;
+    let dataRows = table.find('tbody tr').toArray();
+    if (dataRows.length === 0) {
+      dataRows = table.find('tr').slice(1).toArray();
     }
-    if ($(selector).length > 0) {
-      const text = extractText($, $(selector));
-      if (text) {
-        return true;
+
+    for (const row of dataRows) {
+      const cells = $(row).find('td').toArray();
+      if (cells.length === 0 || descriptionIndex >= cells.length) {
+        continue;
+      }
+
+      const candidate = normalizeWhitespace($(cells[descriptionIndex]).text());
+      if (candidate) {
+        return candidate;
       }
     }
   }
 
-  const bodyText = $('body').text().toLowerCase();
-  if (bodyText.includes('bill of materials is not available')) {
+  return null;
+}
+
+function findDescriptionFromPairs($) {
+  const containerSelectors = [
+    '.ps-field',
+    '.ps-part-summary__detail',
+    '.part-summary__row',
+    '.field-row',
+    '.ps-attribute',
+    '.ps-detail-row',
+    '.ps-part-attribute'
+  ];
+
+  for (const selector of containerSelectors) {
+    const container = $(selector);
+    if (!container || container.length === 0) {
+      continue;
+    }
+
+    let result = null;
+    container.each((_, element) => {
+      const wrapper = $(element);
+      const label = wrapper.find('.ps-field-label, .field-label, .ps-label, .label, .heading, .ps-part-attribute__label').first();
+      const value = wrapper.find('.ps-field-value, .field-value, .ps-value, .value, .content, .ps-part-attribute__value, .ps-field-text').first();
+      const labelText = normalizeWhitespace(label.text());
+      if (/description/i.test(labelText)) {
+        const valueText = normalizeWhitespace(value.text());
+        if (valueText) {
+          result = valueText;
+          return false;
+        }
+      }
+
+      return undefined;
+    });
+
+    if (result) {
+      return result;
+    }
+  }
+
+  const dt = $('dt').filter((_, el) => /description/i.test(normalizeWhitespace($(el).text()))).first();
+  if (dt && dt.length > 0) {
+    const dd = dt.nextAll('dd').filter((_, el) => normalizeWhitespace($(el).text()).length > 0).first();
+    const value = normalizeWhitespace(dd.text());
+    if (value) {
+      return value;
+    }
+  }
+
+  const labelElement = $('span, strong, label, div, th, td').filter((_, el) => {
+    const text = normalizeWhitespace($(el).text());
+    return /^description:?$/i.test(text) || /^description\s*:/i.test(text);
+  }).first();
+
+  if (labelElement && labelElement.length > 0) {
+    const value = extractSiblingValue($, labelElement);
+    if (value) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function extractSiblingValue($, labelElement) {
+  const direct = labelElement.nextAll().filter((_, el) => normalizeWhitespace($(el).text()).length > 0).first();
+  if (direct && direct.length > 0) {
+    return normalizeWhitespace(direct.text());
+  }
+
+  const parent = labelElement.parent();
+  if (parent && parent.length > 0) {
+    if (parent.is('tr')) {
+      const cells = parent.children('td,th');
+      const index = cells.index(labelElement);
+      if (index >= 0) {
+        const nextCells = cells.slice(index + 1);
+        const valueCell = nextCells.filter((_, el) => normalizeWhitespace($(el).text()).length > 0).first();
+        if (valueCell && valueCell.length > 0) {
+          return normalizeWhitespace(valueCell.text());
+        }
+      }
+    }
+
+    if (/dt/i.test(labelElement.get(0)?.name ?? '')) {
+      const dd = labelElement.nextAll('dd').filter((_, el) => normalizeWhitespace($(el).text()).length > 0).first();
+      if (dd && dd.length > 0) {
+        return normalizeWhitespace(dd.text());
+      }
+    }
+  }
+
+  const nextRow = parent && parent.length > 0 ? parent.next('tr') : null;
+  if (nextRow && nextRow.length > 0) {
+    const value = normalizeWhitespace(nextRow.find('td').first().text());
+    if (value) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function findDescription($) {
+  const direct = findFirstText($, DESCRIPTION_SELECTORS);
+  if (direct) {
+    return direct;
+  }
+
+  const fromPairs = findDescriptionFromPairs($);
+  if (fromPairs) {
+    return fromPairs;
+  }
+
+  const fromTable = findDescriptionFromTable($);
+  if (fromTable) {
+    return fromTable;
+  }
+
+  const fallbackElement = $('body')
+    .find('p, span, div, strong')
+    .filter((_, el) => /^description\s*:/i.test(normalizeWhitespace($(el).text())))
+    .first();
+
+  if (fallbackElement && fallbackElement.length > 0) {
+    const text = normalizeWhitespace(fallbackElement.text());
+    const match = text.match(/^description\s*:\s*(.+)$/i);
+    if (match && match[1]) {
+      return match[1].trim();
+    }
+  }
+
+  return null;
+}
+
+function detectNoResults($) {
+  const text = normalizeWhitespace($('body').text());
+  return NO_RESULTS_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+function detectBomPresence($) {
+  let sawContainer = false;
+  let sawPositiveText = false;
+  for (const selector of BOM_CONTAINER_SELECTORS) {
+    const container = $(selector).first();
+    if (!container || container.length === 0) {
+      continue;
+    }
+
+    sawContainer = true;
+    const rowCount = container.find('tr').filter((_, row) => $(row).find('td').length > 0).length;
+    const listCount = container.find('li').length;
+    if (rowCount > 0 || listCount > 0) {
+      return true;
+    }
+
+    const containerText = normalizeWhitespace(container.text());
+    if (containerText) {
+      if (BOM_NEGATIVE_PATTERNS.some((pattern) => pattern.test(containerText))) {
+        return false;
+      }
+      if (/bill of material/i.test(containerText)) {
+        sawPositiveText = true;
+      }
+    }
+  }
+
+  const bodyText = normalizeWhitespace($('body').text());
+  if (BOM_NEGATIVE_PATTERNS.some((pattern) => pattern.test(bodyText))) {
+    return false;
+  }
+
+  if (sawPositiveText) {
+    return true;
+  }
+
+  if (sawContainer) {
     return false;
   }
 
@@ -87,11 +331,36 @@ function detectBomPresence($) {
 function extractImageUrl($) {
   for (const selector of IMAGE_SELECTORS) {
     const element = $(selector).first();
-    if (element && element.length > 0) {
-      const src = element.attr('src');
-      if (src && src.trim()) {
-        return src.trim();
+    if (!element || element.length === 0) {
+      continue;
+    }
+
+    for (const attr of IMAGE_ATTRIBUTE_CANDIDATES) {
+      const value = element.attr(attr);
+      const normalized = typeof value === 'string' ? value.trim() : '';
+      if (normalized) {
+        const url = absolutizeUrl(normalized);
+        if (url) {
+          return url;
+        }
       }
+    }
+  }
+
+  const metaImage = $('meta[property="og:image"], meta[name="twitter:image"]').first();
+  if (metaImage && metaImage.length > 0) {
+    const url = absolutizeUrl(metaImage.attr('content'));
+    if (url) {
+      return url;
+    }
+  }
+
+  const link = $('a[href*="ShowPhoto.aspx"], a[href*="/image"], a[href*="/Image"], a[href*=".jpg"], a[href*=".png"]').first();
+  if (link && link.length > 0) {
+    const href = link.attr('href');
+    const url = absolutizeUrl(href);
+    if (url) {
+      return url;
     }
   }
 
@@ -109,13 +378,12 @@ export function parseSearch(html) {
     return { description: null, bomPresent: false, imageUrl: null };
   }
 
-  const directDescription = findFirstText($, DESCRIPTION_SELECTORS);
-  const fallbackDescription = directDescription || detectFallbackDescription($);
+  const description = findDescription($);
   const bomPresent = detectBomPresence($);
   const imageUrl = extractImageUrl($);
 
   return {
-    description: fallbackDescription,
+    description: description || null,
     bomPresent,
     imageUrl
   };

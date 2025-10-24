@@ -35,8 +35,8 @@ describe('runForPart', () => {
 
     expect(result).toEqual({
       part_number: '511778-001',
-      description: 'Cooling Fan Assembly',
-      image_url: '/images/fan.jpg',
+      description: 'ProLiant DL380 Gen10 Fan Kit',
+      image_url: 'https://partsurfer.hpe.com/assets/images/parts/511778-001_large.jpg',
       source_page: 'Search',
       status: 'ok'
     });
@@ -55,8 +55,8 @@ describe('runForPart', () => {
 
     expect(result).toEqual({
       part_number: '123456-001',
-      description: 'System board',
-      image_url: '/images/kit.jpg',
+      description: 'System Board Assembly',
+      image_url: 'https://partsurfer.hpe.com/media/photos/af573a_large.jpg',
       source_page: 'Search',
       status: 'no_bom'
     });
@@ -92,8 +92,8 @@ describe('runForPart', () => {
 
     expect(result).toEqual({
       part_number: 'AF573A',
-      description: 'Accessory Kit',
-      image_url: '/images/kit.jpg',
+      description: 'Optional Rack Rail Kit for ProLiant servers.',
+      image_url: 'https://partsurfer.hpe.com/media/photos/af573a_large.jpg',
       source_page: 'Photo',
       status: 'ok'
     });
@@ -115,15 +115,15 @@ describe('runBatch', () => {
     expect(rows).toEqual([
       {
         part_number: '511778-001',
-        description: 'Cooling Fan Assembly',
-        image_url: '/images/fan.jpg',
+        description: 'ProLiant DL380 Gen10 Fan Kit',
+        image_url: 'https://partsurfer.hpe.com/assets/images/parts/511778-001_large.jpg',
         source_page: 'Search',
         status: 'ok'
       },
       {
         part_number: 'AF573A',
-        description: 'Accessory Kit',
-        image_url: '/images/kit.jpg',
+        description: 'Optional Rack Rail Kit for ProLiant servers.',
+        image_url: 'https://partsurfer.hpe.com/media/photos/af573a_large.jpg',
         source_page: 'Photo',
         status: 'ok'
       }
