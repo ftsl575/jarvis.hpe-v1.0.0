@@ -3,6 +3,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import config from './config.js';
+import { log } from './logger.js';
 import { runBatch } from './runner.js';
 import { normalizePartNumber } from './normalize.js';
 
@@ -17,6 +19,8 @@ function parseArgs(argv) {
     } else if (value === '--out' || value === '-o') {
       args.out = argv[index + 1];
       index += 1;
+    } else if (value === '--live') {
+      args.live = true;
     }
   }
 
@@ -56,10 +60,15 @@ function toCsvValue(value) {
 }
 
 async function main() {
-  const { input, out } = parseArgs(process.argv.slice(2));
+  const { input, out, live: liveFlag } = parseArgs(process.argv.slice(2));
 
   if (!input || !out) {
-    throw new Error('Usage: node src/cli.js --input <file> --out <file>');
+    throw new Error('Usage: node src/cli.js --input <file> --out <file> [--live]');
+  }
+
+  const live = liveFlag ?? config.LIVE_MODE;
+  if (!live) {
+    console.warn('Live mode disabled; no network requests will be performed.');
   }
 
   const inputPath = path.resolve(process.cwd(), input);
@@ -72,7 +81,8 @@ async function main() {
     .filter(Boolean);
 
   const normalizedParts = uniqueNormalized(parts);
-  const rows = await runBatch(normalizedParts, { throttleMs: 1000 });
+  log.info('CLI processing', { count: normalizedParts.length, live });
+  const rows = await runBatch(normalizedParts, { live });
 
   const header = ['part_number', 'description', 'image_url', 'source_page', 'status'];
   const csvLines = [header, ...rows.map((row) => [
@@ -93,7 +103,6 @@ const isMain = (() => {
 
 if (isMain) {
   main().catch((error) => {
-    // eslint-disable-next-line no-console
     console.error(error.message);
     process.exitCode = 1;
   });

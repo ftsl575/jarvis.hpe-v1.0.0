@@ -31,7 +31,7 @@ describe('runForPart', () => {
       .query({ SearchText: '511778-001' })
       .reply(200, loadFixture('search_ok.html'));
 
-    const result = await runForPart('511778-001');
+    const result = await runForPart('511778-001', { live: true });
 
     expect(result).toEqual({
       part_number: '511778-001',
@@ -51,7 +51,7 @@ describe('runForPart', () => {
       .query({ partnumber: '123456-001' })
       .reply(200, loadFixture('photo_ok.html'));
 
-    const result = await runForPart('123456-001');
+    const result = await runForPart('123456-001', { live: true });
 
     expect(result).toEqual({
       part_number: '123456-001',
@@ -71,7 +71,7 @@ describe('runForPart', () => {
       .query({ partnumber: '000000-001' })
       .reply(200, loadFixture('photo_not_found.html'));
 
-    const result = await runForPart('000000-001');
+    const result = await runForPart('000000-001', { live: true });
 
     expect(result).toEqual({
       part_number: '000000-001',
@@ -88,7 +88,7 @@ describe('runForPart', () => {
       .query({ partnumber: 'AF573A' })
       .reply(200, loadFixture('photo_ok.html'));
 
-    const result = await runForPart('af573a');
+    const result = await runForPart('af573a', { live: true });
 
     expect(result).toEqual({
       part_number: 'AF573A',
@@ -110,7 +110,7 @@ describe('runBatch', () => {
       .query({ partnumber: 'AF573A' })
       .reply(200, loadFixture('photo_ok.html'));
 
-    const rows = await runBatch(['511778-001', 'AF573A'], { throttleMs: 0 });
+    const rows = await runBatch(['511778-001', 'AF573A'], { live: true, throttleMs: 0 });
 
     expect(rows).toEqual([
       {
