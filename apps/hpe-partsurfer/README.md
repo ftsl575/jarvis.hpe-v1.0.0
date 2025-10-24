@@ -34,6 +34,8 @@ The CLI reads part numbers from a text file, deduplicates them, and writes the p
 ```bash
 npm install
 node src/cli.js --input sample_parts.txt --out results.csv
+# Run with live HTTP requests (requires LIVE_MODE=true or --live)
+node src/cli.js --input parts.txt --out results.csv --live
 ```
 
 Sample CSV header:
@@ -50,6 +52,24 @@ Example row:
 
 CLI requests are throttled to one page per second to avoid stressing the public PartSurfer service.
 
+### Live mode (.env and flags)
+
+Create an `.env` file (see `.env.example`) to control production networking behaviour. By default the tooling stays offline (`LIVE_MODE=false`) so Jest and CI suites never attempt real HTTP calls. Override either via the environment file or at runtime:
+
+- `LIVE_MODE=true` allows live HTTP fetches without needing extra flags.
+- `node src/cli.js --input parts.txt --out results.csv --live` forces live mode for that invocation.
+- `GET /api/part?pn=511778-001&live=1` performs a live fetch even if the process-wide default is disabled.
+
+Each fetch honours the resolved live flag and will throw a `LIVE_DISABLED` error unless explicitly enabled.
+
+### Proxy usage (HPE_PROXY_URL)
+
+Set `HPE_PROXY_URL` in `.env` when HPE PartSurfer must be accessed through an HTTP(S) proxy. The same proxy is applied to both HTTP and HTTPS requests via `https-proxy-agent`.
+
+### Logging (LOG_FILE, LOG_LEVEL)
+
+Structured logs are written to both stdout and the file declared by `LOG_FILE` (default `logs/app.log`). Choose verbosity via `LOG_LEVEL` (`debug`, `info`, `warn`, or `error`). The logger automatically creates the target directory when missing.
+
 ## HTTP API
 
 Start the API locally:
@@ -62,6 +82,7 @@ Endpoints:
 
 - `GET /health` – returns `{ "ok": true }` when the service is running.
 - `GET /api/part?pn=511778-001` – responds with the JSON row described above.
+- `GET /api/part?pn=511778-001&live=1` – forces a live fetch for that request.
 
 Example response:
 
@@ -75,7 +96,13 @@ Example response:
 }
 ```
 
-Errors from the upstream PartSurfer site are surfaced with HTTP status `502` and a short message.
+Errors from the upstream PartSurfer site are surfaced with HTTP status `502` and a short message. Requests blocked due to disabl
+ed live mode return HTTP `503`.
+
+## Security and legal
+
+Operate the utilities responsibly: respect the HPE PartSurfer terms of use, honour robots guidance, and keep request rates mode
+st (the default throttle is one request per second). Always obtain permission before scraping data from networks you do not own.
 
 ## Testing
 

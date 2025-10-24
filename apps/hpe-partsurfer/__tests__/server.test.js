@@ -40,7 +40,7 @@ describe('server', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual(row);
-    expect(runForPartMock).toHaveBeenCalledWith('511778-001');
+    expect(runForPartMock).toHaveBeenCalledWith('511778-001', { live: false });
   });
 
   test('GET /api/part maps failures to 502', async () => {
@@ -50,5 +50,26 @@ describe('server', () => {
 
     expect(response.status).toBe(502);
     expect(response.body).toEqual({ error: 'Network error' });
+  });
+
+  test('GET /api/part honors live query', async () => {
+    const row = { status: 'ok' };
+    runForPartMock.mockResolvedValue(row);
+
+    const response = await request(app).get('/api/part').query({ pn: '511778-001', live: '1' });
+
+    expect(response.status).toBe(200);
+    expect(runForPartMock).toHaveBeenCalledWith('511778-001', { live: true });
+  });
+
+  test('GET /api/part maps live disabled to 503', async () => {
+    const error = new Error('Live mode disabled');
+    error.code = 'LIVE_DISABLED';
+    runForPartMock.mockRejectedValue(error);
+
+    const response = await request(app).get('/api/part').query({ pn: '511778-001' });
+
+    expect(response.status).toBe(503);
+    expect(response.body).toEqual({ error: 'Live mode disabled' });
   });
 });

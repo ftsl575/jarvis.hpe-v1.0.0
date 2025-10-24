@@ -19,7 +19,10 @@
   "dependencies": {
     "axios": "^1.6.8",
     "cheerio": "^1.0.0-rc.12",
-    "express": "^4.18.2"
+    "dotenv": "^16.4.5",
+    "express": "^4.18.2",
+    "https-proxy-agent": "^7.0.2",
+    "p-limit": "^6.2.0"
   },
   "devDependencies": {
     "eslint": "^8.57.0",
@@ -28,6 +31,9 @@
     "supertest": "^6.3.3"
   },
   "jest": {
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "setupFiles": [
+      "<rootDir>/jest.setup.js"
+    ]
   }
 }
