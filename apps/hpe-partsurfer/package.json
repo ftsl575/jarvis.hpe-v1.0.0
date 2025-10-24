@@ -2,11 +2,12 @@
   "name": "hpe-partsurfer",
   "version": "1.0.0",
   "description": "Utilities for parsing HPE PartSurfer part numbers.",
+  "type": "module",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/server.js",
     "lint": "eslint .",
-    "test": "jest --coverage",
+    "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --coverage",
     "sample": "node src/cli.js --input sample_parts.txt --out sample_results.csv"
   },
   "keywords": [
@@ -16,11 +17,14 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "axios": "^1.6.8",
+    "cheerio": "^1.0.0-rc.12",
     "express": "^4.18.2"
   },
   "devDependencies": {
     "eslint": "^8.57.0",
     "jest": "^29.7.0",
+    "nock": "^13.4.0",
     "supertest": "^6.3.3"
   },
   "jest": {

@@ -1,50 +1,54 @@
-const request = require('supertest');
-const app = require('../src/server');
-const { evaluatePartNumber } = require('../src/index');
+import { describe, expect, test, beforeEach, jest } from '@jest/globals';
+import request from 'supertest';
 
-describe('HTTP API', () => {
+const runForPartMock = jest.fn();
+
+jest.unstable_mockModule('../src/runner.js', () => ({
+  runForPart: runForPartMock
+}));
+
+const { default: app } = await import('../src/server.js');
+
+describe('server', () => {
+  beforeEach(() => {
+    runForPartMock.mockReset();
+  });
+
   test('GET /health returns ok', async () => {
     const response = await request(app).get('/health');
-
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ ok: true });
   });
 
-  test('GET /api/part responds with normalized data for valid part number', async () => {
-    const partNumber = '511778-001';
-    const expected = evaluatePartNumber(partNumber);
-
-    const response = await request(app).get('/api/part').query({ pn: partNumber });
-
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual({
-      input: expected.input,
-      part_number: expected.partNumber,
-      status: expected.status
-    });
-  });
-
-  test('GET /api/part without part number returns 400', async () => {
+  test('GET /api/part validates query parameter', async () => {
     const response = await request(app).get('/api/part');
-
     expect(response.status).toBe(400);
-    expect(response.body).toEqual({
-      error: 'Invalid part number',
-      input: undefined
-    });
+    expect(response.body).toEqual({ error: 'Invalid part number' });
   });
 
-  test('GET /api/part with invalid part number mirrors evaluator response', async () => {
-    const partNumber = 'bad';
-    const expected = evaluatePartNumber(partNumber);
+  test('GET /api/part returns runner output', async () => {
+    const row = {
+      part_number: '511778-001',
+      description: 'Cooling Fan Assembly',
+      image_url: '/images/fan.jpg',
+      source_page: 'Search',
+      status: 'ok'
+    };
+    runForPartMock.mockResolvedValue(row);
 
-    const response = await request(app).get('/api/part').query({ pn: partNumber });
+    const response = await request(app).get('/api/part').query({ pn: '511778-001' });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({
-      input: expected.input,
-      part_number: expected.partNumber,
-      status: expected.status
-    });
+    expect(response.body).toEqual(row);
+    expect(runForPartMock).toHaveBeenCalledWith('511778-001');
+  });
+
+  test('GET /api/part maps failures to 502', async () => {
+    runForPartMock.mockRejectedValue(new Error('Network error'));
+
+    const response = await request(app).get('/api/part').query({ pn: '511778-001' });
+
+    expect(response.status).toBe(502);
+    expect(response.body).toEqual({ error: 'Network error' });
   });
 });
