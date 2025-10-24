@@ -25,3 +25,14 @@
      - `/health` → `{"ok":true}`
      - `/api/part?pn=511778-001` → `{"input":"511778-001","part_number":"511778-001","status":"VALID"}`
 5. Следующий шаг: добавить реальный парсинг страниц HPE PartSurfer (Search.aspx / ShowPhoto.aspx) и возврат полей `{ part_number, description, image_url, source_page, status }` в CLI и API.
+
+## 2025-10-24 — Search + Photo parsing implemented
+1. Реализован сбор метаданных с HPE PartSurfer:
+   - Парсер Search.aspx (BOM/описание).
+   - Парсер ShowPhoto.aspx (картинка/краткое описание).
+   - Автоопределение режима и fallback: при отсутствии BOM на Search — попытка Photo.
+2. Добавлен fetch-слой (axios) с таймаутом 10s и 2 ретраями, последовательное выполнение с троттлингом 1 req/с.
+3. Обновлены CLI и HTTP‑API: теперь возвращаются поля `{ part_number, description, image_url, source_page, status }`.
+4. Тесты: nock‑бэки для fetch и покрытие сценариев ok / no_bom / not_found; интеграционные тесты API.
+5. Документация обновлена: режимы, схема вывода, примеры.
+6. Следующий шаг: .env + логирование запросов (прокси, таймауты, ретраи) и Dockerfile.
