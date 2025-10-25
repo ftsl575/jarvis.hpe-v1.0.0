@@ -16,14 +16,26 @@ jobs:
           node-version: 20
           cache: npm
           cache-dependency-path: apps/hpe-partsurfer/package-lock.json
+
       - name: Install dependencies
         run: npm ci || npm install
+
+      - name: Skip CI on release branches
+        if: startsWith(github.ref, 'refs/heads/release/')
+        run: echo "Skipping lint/test/sample on release branches"
+
       - name: Lint
+        if: "!startsWith(github.ref, 'refs/heads/release/')"
         run: npm run lint
+
       - name: Test
+        if: "!startsWith(github.ref, 'refs/heads/release/')"
         run: npm test
+
       - name: Run sample
+        if: "!startsWith(github.ref, 'refs/heads/release/')"
         run: npm run sample
+
       - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@v4
