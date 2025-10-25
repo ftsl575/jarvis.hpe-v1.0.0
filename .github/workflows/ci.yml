@@ -22,19 +22,19 @@ jobs:
 
       # пропускаем для PR, где head-ветка release/*
       - name: Skip CI on release branches
-        if: startsWith(github.event.pull_request.head.ref, 'release/')
+        if: ${{ startsWith(github.event.pull_request.head.ref, 'release/') }}
         run: echo "Skipping lint/test/sample on release branches"
 
       - name: Lint
-        if: "!startsWith(github.event.pull_request.head.ref, 'release/')"
+        if: ${{ !startsWith(github.event.pull_request.head.ref, 'release/') }}
         run: npm run lint
 
       - name: Test
-        if: "!startsWith(github.event.pull_request.head.ref, 'release/')"
+        if: ${{ !startsWith(github.event.pull_request.head.ref, 'release/') }}
         run: npm test
 
       - name: Run sample
-        if: "!startsWith(github.event.pull_request.head.ref, 'release/')"
+        if: ${{ !startsWith(github.event.pull_request.head.ref, 'release/') }}
         run: npm run sample
 
       - name: Upload coverage
