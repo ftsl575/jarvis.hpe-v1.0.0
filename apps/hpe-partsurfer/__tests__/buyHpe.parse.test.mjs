@@ -9,9 +9,6 @@ describe('parseBuyHpe', () => {
 
     expect(result).toEqual({
       title: 'HPE ProLiant DL380 Gen10 Server',
-      price: '12345.67',
-      priceCurrency: 'USD',
-      availability: 'InStock',
       sku: 'Q1J09B',
       partNumber: 'Q1J09B',
       url: 'https://buy.hpe.com/us/en/p/Q1J09B',
@@ -27,9 +24,6 @@ describe('parseBuyHpe', () => {
 
     expect(result).toEqual({
       title: 'HPE Aruba Networking 630 Series',
-      price: '1,599.00',
-      priceCurrency: 'USD',
-      availability: 'InStock',
       sku: 'R7K89A',
       partNumber: 'R7K89A',
       url: 'https://buy.hpe.com/us/en/p/R7K89A',
@@ -52,5 +46,28 @@ describe('parseBuyHpe', () => {
       title: expectedTitle,
       url: expectedUrl
     });
+  });
+
+  it('uses meta title when heading selectors are missing', async () => {
+    const fileUrl = new URL('../fixtures/buyhpe/meta-title.html', import.meta.url);
+    const html = await readFile(fileUrl, 'utf8');
+    const result = parseBuyHpe(html, { url: fileUrl.href });
+
+    expect(result).toEqual({
+      title: 'HPE Aruba CX Switch',
+      sku: 'JL815A',
+      partNumber: 'JL815A',
+      url: 'https://buy.hpe.com/us/en/p/JL815A',
+      image: 'https://buy.hpe.com/content/dam/hpe/aruba-cx-switch.png',
+      category: 'Networking'
+    });
+  });
+
+  it('returns null when no title is present', async () => {
+    const fileUrl = new URL('../fixtures/buyhpe/empty-template.html', import.meta.url);
+    const html = await readFile(fileUrl, 'utf8');
+    const result = parseBuyHpe(html, { url: fileUrl.href });
+
+    expect(result).toBeNull();
   });
 });

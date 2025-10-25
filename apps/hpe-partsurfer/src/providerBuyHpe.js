@@ -1,6 +1,7 @@
 import { load } from 'cheerio';
 import fetchBuyHpe from './fetchBuyHpe.js';
 import { parseBuyHpe } from './parseBuyHpe.js';
+import { normalizePartNumber } from './normalize.js';
 
 const DEFAULT_BASE_URL = 'https://buy.hpe.com/';
 const DEFAULT_LOCALE = 'us/en';
@@ -9,11 +10,8 @@ function normalizeSku(value) {
   if (typeof value !== 'string') {
     throw new TypeError('SKU must be a string');
   }
-  const trimmed = value.trim();
-  if (!trimmed) {
-    throw new TypeError('SKU must not be empty');
-  }
-  return trimmed;
+
+  return normalizePartNumber(value);
 }
 
 function resolveLocale(locale) {
@@ -82,6 +80,9 @@ function buildFetchOptions(options, baseUrl) {
       Object.assign(fetchOptions, options.fetch);
     }
   }
+  if (options.logger) {
+    fetchOptions.logger = options.logger;
+  }
   return fetchOptions;
 }
 
@@ -91,7 +92,11 @@ function isNotFoundStatus(status) {
 
 async function fetchProduct(urlOrPath, fetchOptions, sku) {
   try {
-    const response = await fetchBuyHpe(urlOrPath, fetchOptions);
+    const response = await fetchBuyHpe(urlOrPath, {
+      ...fetchOptions,
+      partNumber: sku,
+      provider: 'BUY'
+    });
     const html = typeof response.html === 'string' ? response.html : '';
     if (!html.trim()) {
       return null;
@@ -117,7 +122,8 @@ export async function providerBuyHpe(sku, options = {}) {
   const fetchOptions = buildFetchOptions(options, baseUrl);
 
   try {
-    const productPath = `${locale}/p/${encodeURIComponent(normalizedSku)}`;
+    const slug = encodeURIComponent(normalizedSku.toLowerCase());
+    const productPath = `${locale}/p/${slug}`;
     const product = await fetchProduct(productPath, fetchOptions, normalizedSku);
     if (product) {
       return { ...product, fetchedFrom: 'product' };

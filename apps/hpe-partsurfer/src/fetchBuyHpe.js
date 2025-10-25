@@ -7,6 +7,19 @@ const DEFAULT_TIMEOUT_MS = 12_000;
 const DEFAULT_RETRIES = 2;
 const DEFAULT_USER_AGENT = config.USER_AGENT ?? 'Mozilla/5.0 (compatible; HPEPartSurferBot/1.0)';
 
+function logNetworkEvent(options, payload) {
+  const logger = options?.logger;
+  if (!logger || typeof logger.log !== 'function') {
+    return;
+  }
+
+  try {
+    logger.log({ ts: new Date().toISOString(), ...payload });
+  } catch (error) {
+    // Swallow logging failures to avoid affecting fetch flow.
+  }
+}
+
 function resolveLive(options) {
   if (options && typeof options.live === 'boolean') {
     return options.live;
@@ -105,12 +118,14 @@ export async function fetchBuyHpe(target, options = {}) {
     }, timeoutMs);
 
     try {
+      const started = Date.now();
       log.info('Fetching buy.hpe.com resource', { url, attempt: attempt + 1 });
       const response = await fetchImpl(url, {
         method: 'GET',
         headers: {
           'user-agent': userAgent,
-          accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+          accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'accept-language': 'en-US,en;q=0.8'
         },
         redirect: 'follow',
         signal: controller.signal
@@ -131,7 +146,19 @@ export async function fetchBuyHpe(target, options = {}) {
 
       const html = await response.text();
       const size = Buffer.byteLength(html, 'utf8');
-      log.info('Fetched buy.hpe.com resource', { url: finalUrl, status, bytes: size });
+      const durationMs = Date.now() - started;
+      log.info('Fetched buy.hpe.com resource', { url: finalUrl, status, bytes: size, durationMs });
+      logNetworkEvent(options, {
+        sku: options.partNumber ?? null,
+        provider: options.provider ?? 'BUY',
+        url: finalUrl,
+        http: status,
+        bytes: size,
+        durationMs,
+        retries: attempt,
+        parseHint: 'buy',
+        success: true
+      });
       return { url: finalUrl, status, html };
     } catch (error) {
       clearTimeout(timeoutId);
@@ -141,6 +168,18 @@ export async function fetchBuyHpe(target, options = {}) {
       const shouldRetry = shouldRetryStatus(status) || (!status && attempt < retries);
       const level = attempt === retries || !shouldRetry ? 'error' : 'warn';
       log[level]('Failed to fetch buy.hpe.com resource', { url, attempt: attempt + 1, message: error?.message, status });
+
+      logNetworkEvent(options, {
+        sku: options.partNumber ?? null,
+        provider: options.provider ?? 'BUY',
+        url,
+        http: status ?? null,
+        bytes: 0,
+        durationMs: null,
+        retries: attempt,
+        parseHint: 'buy',
+        success: false
+      });
 
       if (!shouldRetry || attempt === retries) {
         throw error;

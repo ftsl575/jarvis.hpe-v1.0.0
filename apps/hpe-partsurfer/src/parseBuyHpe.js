@@ -1,8 +1,33 @@
 import { load } from 'cheerio';
 import { normalizeWhitespace } from './html.js';
+import { normalizeUrl } from './normalize.js';
 
 const SCHEMA_PRODUCT = 'product';
 const SCHEMA_OFFER = 'offer';
+const DEFAULT_BASE_URL = 'https://buy.hpe.com/';
+
+const TITLE_SELECTORS = [
+  'h1.product-detail__name',
+  'h1.pdp-product-name',
+  '.product-detail__summary h1',
+  '.product__title',
+  '[data-testid="pdp_productTitle"]'
+];
+
+const META_TITLE_SELECTORS = [
+  ['meta[property="og:title"]', 'content'],
+  ['meta[name="twitter:title"]', 'content']
+];
+
+const SKU_ATTRIBUTE_SELECTORS = [
+  ['[data-product-sku]', 'data-product-sku'],
+  ['[data-sku]', 'data-sku'],
+  ['[data-product-id]', 'data-product-id'],
+  ['[data-part-number]', 'data-part-number'],
+  ['meta[name="sku"]', 'content'],
+  ['meta[itemprop="sku"]', 'content'],
+  ['[itemprop="sku"]', 'content']
+];
 
 function isSchemaTypeMatch(value, expected) {
   if (!value) {
@@ -97,34 +122,6 @@ function pickOffer(offers) {
   return null;
 }
 
-function normalizeAvailability(value) {
-  const text = coerceString(value);
-  if (!text) {
-    return null;
-  }
-  const lowered = text.toLowerCase();
-  if (lowered.includes('instock') || lowered.includes('in_stock') || lowered.includes('in stock')) {
-    return 'InStock';
-  }
-  if (lowered.includes('outofstock') || lowered.includes('out_of_stock') || lowered.includes('out of stock')) {
-    return 'OutOfStock';
-  }
-  if (lowered.includes('preorder')) {
-    return 'PreOrder';
-  }
-  if (lowered.startsWith('http')) {
-    const tail = lowered.split('/').pop();
-    if (tail) {
-      const clean = tail.replace(/[^a-z]/g, '');
-      if (clean) {
-        return clean.charAt(0).toUpperCase() + clean.slice(1);
-      }
-    }
-    return text.trim();
-  }
-  return text.trim();
-}
-
 function absolutize(url, baseUrl) {
   if (!url) {
     return null;
@@ -153,19 +150,15 @@ function parseJsonLd($, baseUrl) {
           continue;
         }
         const offer = pickOffer(node.offers ?? node.offer);
-        const url = coerceString(node.url) || baseUrl;
         const sku = coerceString(node.sku) || pickProductIdentifier(node);
         const partNumber = pickProductIdentifier(node) || sku;
         return {
-          title: coerceString(node.name) || coerceString(node.title),
-          price: coerceString(offer?.price),
-          priceCurrency: coerceString(offer?.priceCurrency) || coerceString(node.priceCurrency),
-          availability: normalizeAvailability(offer?.availability ?? node.availability),
+          title: coerceString(node.name) || coerceString(node.title) || null,
           sku: sku || null,
           partNumber: partNumber || null,
-          url: absolutize(url, baseUrl),
+          url: absolutize(coerceString(node.url), baseUrl),
           image: absolutize(coerceString(node.image), baseUrl),
-          category: coerceString(node.category) || coerceString(node.categoryName)
+          category: coerceString(node.category) || coerceString(node.categoryName) || coerceString(offer?.category) || null
         };
       }
     } catch (error) {
@@ -191,68 +184,62 @@ function findFirstBreadcrumb($) {
   return items.length > 0 ? items.join(' > ') : null;
 }
 
-function extractAvailability($) {
-  const selectors = ['.availability', '[data-availability]', '[itemprop="availability"]'];
-  for (const selector of selectors) {
-    const element = $(selector).first();
-    if (!element || element.length === 0) {
-      continue;
-    }
-    const attr = element.attr('data-availability');
-    const text = normalizeWhitespace(attr || element.text());
+function findTitle($) {
+  for (const selector of TITLE_SELECTORS) {
+    const text = normalizeWhitespace($(selector).first().text());
     if (text) {
-      return normalizeAvailability(text);
+      return text;
+    }
+  }
+  for (const [selector, attribute] of META_TITLE_SELECTORS) {
+    const value = $(selector).attr(attribute);
+    if (typeof value === 'string' && value.trim()) {
+      const text = normalizeWhitespace(value);
+      if (text) {
+        return text;
+      }
     }
   }
   return null;
 }
 
-function extractTitle($) {
-  const productHeading = normalizeWhitespace($('h1.product-detail__name').first().text());
-  if (productHeading) {
-    return productHeading;
+function extractSkuFromDom($) {
+  for (const [selector, attr] of SKU_ATTRIBUTE_SELECTORS) {
+    const element = $(selector).first();
+    if (!element || element.length === 0) {
+      continue;
+    }
+    const value = attr === 'content' ? element.attr(attr) : element.attr(attr) ?? element.text();
+    const normalized = normalizeWhitespace(value ?? '');
+    if (normalized) {
+      return normalized;
+    }
   }
-
-  const testIdHeading = normalizeWhitespace($('[data-testid="pdp_productTitle"]').first().text());
-  if (testIdHeading) {
-    return testIdHeading;
+  const inlineSku = normalizeWhitespace($('[itemprop="sku"]').first().text());
+  if (inlineSku) {
+    return inlineSku;
   }
-
-  const ogTitle = textFromMeta($, 'og:title');
-  if (ogTitle) {
-    return ogTitle;
-  }
-
-  const twitterTitle = textFromMeta($, 'twitter:title');
-  if (twitterTitle) {
-    return twitterTitle;
-  }
-
-  const genericHeading = normalizeWhitespace($('h1').first().text());
-  if (genericHeading) {
-    return genericHeading;
-  }
-
-  const documentTitle = normalizeWhitespace($('title').first().text());
-  return documentTitle || null;
+  return null;
 }
 
 function extractImage($, baseUrl) {
   const inlineSelectors = [
     'img[data-product-image]',
+    '.product-detail__gallery img',
     '.product-image img',
     'article img',
     'img[loading]'
   ];
   for (const selector of inlineSelectors) {
     const element = $(selector).first();
-    if (element && element.length) {
-      const src = element.attr('src');
-      if (src) {
-        const absolute = absolutize(src, baseUrl);
-        if (absolute) {
-          return absolute;
-        }
+    if (!element || element.length === 0) {
+      continue;
+    }
+    const src = element.attr('src');
+    if (src) {
+      const absolute = absolutize(src, baseUrl);
+      if (absolute) {
+        return absolute;
       }
     }
   }
@@ -263,107 +250,37 @@ function extractImage($, baseUrl) {
   return null;
 }
 
-function extractPrice($) {
-  const attrSelectors = [
-    ['[data-price]', 'data-price'],
-    ['[data-price-amount]', 'data-price-amount'],
-    ['meta[itemprop="price"]', 'content']
-  ];
-  for (const [selector, attribute] of attrSelectors) {
-    const element = $(selector).first();
-    if (element && element.length) {
-      const value = element.attr(attribute);
-      if (value) {
-        return normalizeWhitespace(value.replace(/[^0-9.,-]/g, ''));
-      }
+function resolveBaseUrl(options) {
+  if (options && typeof options.baseUrl === 'string' && options.baseUrl) {
+    try {
+      return new URL(options.baseUrl, DEFAULT_BASE_URL).toString();
+    } catch (error) {
+      return DEFAULT_BASE_URL;
     }
   }
-  const textSelectors = ['.price', '.price-value', '.product-price'];
-  for (const selector of textSelectors) {
-    const element = $(selector).first();
-    if (element && element.length) {
-      const value = normalizeWhitespace(element.text());
-      if (value) {
-        const numeric = value.replace(/[^0-9.,-]/g, '');
-        if (numeric) {
-          return numeric;
-        }
+  if (options && typeof options.url === 'string' && options.url) {
+    try {
+      const parsed = new URL(options.url);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        parsed.pathname = '/';
+        parsed.search = '';
+        parsed.hash = '';
+        return parsed.toString();
       }
+    } catch (error) {
+      return DEFAULT_BASE_URL;
     }
   }
-  return null;
+  return DEFAULT_BASE_URL;
 }
 
-function extractCurrency($) {
-  const attrSelectors = [
-    ['meta[itemprop="priceCurrency"]', 'content'],
-    ['[data-price-currency]', 'data-price-currency'],
-    ['[data-currency]', 'data-currency']
-  ];
-  for (const [selector, attribute] of attrSelectors) {
-    const element = $(selector).first();
-    if (element && element.length) {
-      const value = normalizeWhitespace(element.attr(attribute));
-      if (value) {
-        return value.toUpperCase();
-      }
-    }
-  }
-  return null;
-}
-
-function extractIdentifier($) {
-  const identifierSelectors = [
-    ['[data-sku]', 'data-sku'],
-    ['[data-product-id]', 'data-product-id'],
-    ['[data-part-number]', 'data-part-number'],
-    ['meta[name="sku"]', 'content'],
-    ['meta[itemprop="sku"]', 'content']
-  ];
-  for (const [selector, attr] of identifierSelectors) {
-    const element = $(selector).first();
-    if (element && element.length) {
-      const value = normalizeWhitespace(element.attr(attr));
-      if (value) {
-        return value;
-      }
-    }
-  }
-  const h1 = normalizeWhitespace($('h1').first().text());
-  if (h1) {
-    const match = h1.match(/\b([A-Z0-9]{3,}-?[A-Z0-9]{0,})\b/);
-    if (match) {
-      return match[1];
-    }
-  }
-  return null;
-}
-
-function parseFallback($, baseUrl) {
-  const title = extractTitle($);
-  const image = extractImage($, baseUrl);
-  const canonical = $('link[rel="canonical"]').attr('href') || textFromMeta($, 'og:url');
-  const price = extractPrice($);
-  const currency = extractCurrency($);
-  const availability = extractAvailability($);
-  const identifier = extractIdentifier($);
-  const category = textFromMeta($, 'product:category') || textFromMeta($, 'og:category') || findFirstBreadcrumb($);
-
-  if (!title) {
+function resolveCanonicalUrl($, baseUrl, fallback) {
+  const canonical = $('link[rel="canonical"]').attr('href') || textFromMeta($, 'og:url') || fallback;
+  if (!canonical) {
     return null;
   }
-
-  return {
-    title: title || null,
-    price: price || null,
-    priceCurrency: currency || null,
-    availability: availability || null,
-    sku: identifier || null,
-    partNumber: identifier || null,
-    url: absolutize(canonical || baseUrl, baseUrl),
-    image: image,
-    category: category || null
-  };
+  const absolute = absolutize(canonical, baseUrl) || canonical;
+  return normalizeUrl(absolute) || absolute;
 }
 
 export function parseBuyHpe(html, options = {}) {
@@ -374,27 +291,30 @@ export function parseBuyHpe(html, options = {}) {
   if (!trimmed) {
     return null;
   }
-  let baseUrl = 'https://buy.hpe.com/';
-  if (typeof options.baseUrl === 'string' && options.baseUrl) {
-    baseUrl = options.baseUrl;
-  } else if (typeof options.url === 'string' && options.url) {
-    try {
-      const parsed = new URL(options.url);
-      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-        baseUrl = parsed.toString();
-      }
-    } catch (error) {
-      // ignore invalid URLs and fall back to default base
-    }
-  }
+
+  const baseUrl = resolveBaseUrl(options);
   const $ = load(html);
-
-  const fromJsonLd = parseJsonLd($, baseUrl);
-  if (fromJsonLd) {
-    return fromJsonLd;
+  const structured = parseJsonLd($, baseUrl) || null;
+  const title = findTitle($) || structured?.title || null;
+  if (!title) {
+    return null;
   }
 
-  return parseFallback($, baseUrl);
+  const sku = structured?.sku || extractSkuFromDom($) || null;
+  const partNumber = structured?.partNumber || sku || null;
+  const fallbackUrl = typeof options.url === 'string' ? options.url : null;
+  const url = resolveCanonicalUrl($, baseUrl, structured?.url || fallbackUrl);
+  const image = structured?.image || extractImage($, baseUrl) || null;
+  const category = structured?.category || textFromMeta($, 'product:category') || textFromMeta($, 'og:category') || findFirstBreadcrumb($) || null;
+
+  return {
+    title,
+    sku,
+    partNumber,
+    url,
+    image,
+    category
+  };
 }
 
 export default parseBuyHpe;

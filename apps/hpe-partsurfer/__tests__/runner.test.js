@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from '@jest/globals';
+import axios from 'axios';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +10,16 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function loadFixture(name) {
   return readFileSync(path.join(__dirname, 'fixtures', name), 'utf8');
+}
+
+async function axiosFetch(url) {
+  const response = await axios.get(url.toString(), { responseType: 'text', proxy: false });
+  return {
+    ok: response.status >= 200 && response.status < 300,
+    status: response.status,
+    url: response.request.res.responseUrl,
+    text: async () => response.data
+  };
 }
 
 beforeAll(() => {
@@ -31,7 +42,7 @@ describe('runForPart', () => {
       .query({ SearchText: 'OKN1234-001' })
       .reply(200, loadFixture('search_okn.html'));
 
-    const result = await runForPart('OKN1234-001', { live: true });
+    const result = await runForPart('OKN1234-001', { live: true, fetch: axiosFetch });
 
     expect(result).toEqual({
       part_number: 'OKN1234-001',
@@ -53,7 +64,7 @@ describe('runForPart', () => {
       .query({ SearchText: 'P04500-001' })
       .reply(200, loadFixture('search_replaced.html'));
 
-    const result = await runForPart('P04500-001', { live: true });
+    const result = await runForPart('P04500-001', { live: true, fetch: axiosFetch });
 
     expect(result).toEqual({
       part_number: 'P04500-001',
@@ -75,7 +86,7 @@ describe('runForPart', () => {
       .query({ SearchText: 'Q1A23-001' })
       .reply(200, loadFixture('search_sku.html'));
 
-    const result = await runForPart('Q1A23-001', { live: true });
+    const result = await runForPart('Q1A23-001', { live: true, fetch: axiosFetch });
 
     expect(result).toEqual({
       part_number: 'Q1A23-001',
@@ -97,7 +108,7 @@ describe('runForPart', () => {
       .query({ SearchText: 'RACKKIT-123' })
       .reply(200, loadFixture('search_compat.html'));
 
-    const result = await runForPart('RACKKIT-123', { live: true });
+    const result = await runForPart('RACKKIT-123', { live: true, fetch: axiosFetch });
 
     expect(result).toEqual({
       part_number: 'RACKKIT-123',
@@ -122,7 +133,7 @@ describe('runForPart', () => {
       .query({ partnumber: '000000-001' })
       .reply(200, loadFixture('photo_not_found.html'));
 
-    const result = await runForPart('000000-001', { live: true });
+    const result = await runForPart('000000-001', { live: true, fetch: axiosFetch });
 
     expect(result).toEqual({
       part_number: '000000-001',
@@ -144,7 +155,7 @@ describe('runForPart', () => {
       .query({ partnumber: 'AF573A' })
       .reply(200, loadFixture('photo_ok.html'));
 
-    const result = await runForPart('af573a', { live: true });
+    const result = await runForPart('af573a', { live: true, fetch: axiosFetch });
 
     expect(result).toEqual({
       part_number: 'AF573A',
@@ -169,7 +180,7 @@ describe('runForPart', () => {
       .query({ SearchText: 'AF9999A' })
       .reply(200, loadFixture('search_accessory.html'));
 
-    const result = await runForPart('af9999a', { live: true });
+    const result = await runForPart('af9999a', { live: true, fetch: axiosFetch });
 
     expect(result).toEqual({
       part_number: 'AF9999A',
@@ -196,7 +207,7 @@ describe('runBatch', () => {
       .query({ partnumber: 'AF573A' })
       .reply(200, loadFixture('photo_ok.html'));
 
-    const rows = await runBatch(['OKN1234-001', 'AF573A'], { live: true, throttleMs: 0 });
+    const rows = await runBatch(['OKN1234-001', 'AF573A'], { live: true, throttleMs: 0, fetch: axiosFetch });
 
     expect(rows).toEqual([
       {

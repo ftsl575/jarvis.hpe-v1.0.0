@@ -41,6 +41,15 @@ export async function runForPart(partNumber, options = {}) {
   };
 
   const fetchOptions = { live };
+  if (options.fetch) {
+    fetchOptions.fetch = options.fetch;
+  }
+  if (Number.isFinite(options.retries)) {
+    fetchOptions.retries = options.retries;
+  }
+  if (options.logger) {
+    fetchOptions.logger = options.logger;
+  }
   let searchResult = null;
   let searchParseError = null;
 
@@ -200,7 +209,12 @@ export async function runBatch(parts, options = {}) {
 
   const tasks = parts.map((part) => limit(async () => {
     await applyThrottle();
-    return runForPart(part, { live });
+    return runForPart(part, {
+      live,
+      fetch: options.fetch,
+      retries: options.retries,
+      logger: options.logger
+    });
   }));
 
   const results = [];

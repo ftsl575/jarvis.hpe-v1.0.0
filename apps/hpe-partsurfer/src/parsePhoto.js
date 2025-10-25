@@ -51,6 +51,9 @@ const NO_PHOTO_PATTERNS = [
   /we are unable to find an image/i
 ];
 
+const PART_DESCRIPTION_PATTERN = /part description\s*[:：]\s*(.+)/i;
+const NOT_AVAILABLE_PATTERN = /product description not available/i;
+
 function isPlaceholderUrl(url) {
   if (!url) {
     return true;
@@ -75,6 +78,10 @@ function extractText($, element) {
 function sanitizeTitle(value) {
   const text = normalizeText(value);
   if (!text) {
+    return null;
+  }
+
+  if (NOT_AVAILABLE_PATTERN.test(text)) {
     return null;
   }
 
@@ -123,29 +130,47 @@ function extractImage($) {
   return { url: null, element: null };
 }
 
+function pickLongestMeaningful(candidates) {
+  return candidates.reduce((longest, current) => {
+    if (!current) {
+      return longest;
+    }
+
+    if (!longest || current.length > longest.length) {
+      return current;
+    }
+
+    return longest;
+  }, null);
+}
+
 function extractCaption($, imageElement) {
   if (!imageElement || imageElement.length === 0) {
     return null;
   }
 
+  const containers = [];
   const figure = imageElement.closest('figure');
   if (figure && figure.length > 0) {
-    const caption = figure.find(CAPTION_SELECTOR_STRING).first();
-    const text = sanitizeTitle(extractText($, caption));
-    if (text) {
-      return text;
-    }
+    containers.push(figure);
   }
 
-  const parentCaption = imageElement.parent().find(CAPTION_SELECTOR_STRING).first();
-  if (parentCaption && parentCaption.length > 0) {
-    const text = sanitizeTitle(extractText($, parentCaption));
-    if (text) {
-      return text;
-    }
+  const parent = imageElement.parent();
+  if (parent && parent.length > 0) {
+    containers.push(parent);
   }
 
-  return null;
+  const candidates = [];
+  for (const container of containers) {
+    container.find(CAPTION_SELECTOR_STRING).each((_, element) => {
+      const text = sanitizeTitle(extractText($, $(element)));
+      if (text) {
+        candidates.push(text);
+      }
+    });
+  }
+
+  return pickLongestMeaningful(candidates);
 }
 
 function isNotFound($) {
@@ -169,18 +194,18 @@ function extractNearbyTitle($, imageElement) {
       continue;
     }
 
-    let result = null;
+    const candidates = [];
     container.find(NEARBY_SELECTOR_STRING).each((_, element) => {
       const text = sanitizeTitle(extractText($, $(element)));
       if (text) {
-        result = text;
-        return false;
+        candidates.push(text);
       }
       return undefined;
     });
 
-    if (result) {
-      return result;
+    const longest = pickLongestMeaningful(candidates);
+    if (longest) {
+      return longest;
     }
   }
 
@@ -200,40 +225,89 @@ function extractAltText(imageElement) {
   return sanitizeTitle(alt);
 }
 
+function extractDescriptionFromBody($) {
+  const body = $('body').text();
+  if (!body) {
+    return null;
+  }
+
+  const lines = body.split(/\r?\n|\r/);
+  for (const line of lines) {
+    const normalized = collapseWhitespace(line);
+    if (NOT_AVAILABLE_PATTERN.test(normalized)) {
+      continue;
+    }
+    const match = normalized.match(PART_DESCRIPTION_PATTERN);
+    if (match && match[1]) {
+      const candidate = sanitizeTitle(match[1]);
+      if (candidate) {
+        return candidate;
+      }
+    }
+  }
+
+  const collapsed = collapseWhitespace(body);
+  if (NOT_AVAILABLE_PATTERN.test(collapsed)) {
+    return null;
+  }
+  const inlineMatch = collapsed.match(PART_DESCRIPTION_PATTERN);
+  if (inlineMatch && inlineMatch[1]) {
+    const candidate = sanitizeTitle(inlineMatch[1]);
+    if (candidate) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
 export function parsePhoto(html) {
   if (!html) {
-    return { title: null, imageUrl: null };
+    return { title: null, imageUrl: null, notFound: true };
   }
 
   const $ = load(html);
 
   if (isNotFound($)) {
-    return { title: null, imageUrl: null };
+    return { title: null, imageUrl: null, notFound: true };
   }
 
+  const bodyText = $('body').text() ?? '';
+  const descriptionUnavailable = NOT_AVAILABLE_PATTERN.test(bodyText);
   const headTitle = sanitizeTitle($('head > title').first().text()) || null;
   const image = extractImage($);
   const caption = image.element ? extractCaption($, image.element) : null;
   const nearbyTitle = image.element ? extractNearbyTitle($, image.element) : null;
-  let globalTitle = null;
+  const bodyTitle = extractDescriptionFromBody($);
 
-  if (!caption && !nearbyTitle) {
-    const elements = $(NEARBY_SELECTOR_STRING).toArray();
-    for (const element of elements) {
+  const globalCandidates = [];
+  if (!caption || !nearbyTitle) {
+    $(NEARBY_SELECTOR_STRING).each((_, element) => {
       const text = sanitizeTitle(extractText($, $(element)));
       if (text) {
-        globalTitle = text;
-        break;
+        globalCandidates.push(text);
       }
-    }
+      return undefined;
+    });
   }
 
-  const altText = extractAltText(image.element || $('img').first());
+  const globalTitle = pickLongestMeaningful(globalCandidates);
+  const altText = descriptionUnavailable ? null : extractAltText(image.element || $('img').first());
 
-  const title = headTitle || caption || nearbyTitle || globalTitle || altText || null;
+  const title = bodyTitle
+    || caption
+    || nearbyTitle
+    || globalTitle
+    || headTitle
+    || altText
+    || null;
+
+  const imageUrl = image.url;
+  const notFound = descriptionUnavailable || (!title && !imageUrl);
 
   return {
     title,
-    imageUrl: image.url
+    imageUrl,
+    notFound
   };
 }

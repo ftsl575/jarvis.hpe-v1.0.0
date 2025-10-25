@@ -55,20 +55,30 @@ denylist (currently `804329-002`) skip auto-correction entirely and are emitted 
 
 ## Parser notes
 
-- **PartSurfer Search.aspx** now prefers the details table row whose label is exactly `Part Description`;
-  this value is used for `PS_Title`. Category extraction first looks for `Product Category`/`Category`
+- **PartSurfer Search.aspx** now prefers the details table row whose label matches `Part Description`
+  (case-insensitive); the cell value is decoded and trimmed before overriding `PS_Title` unless it equals
+  `Product Description Not Available`. Category extraction first looks for `Product Category`/`Category`
   in the same table, then falls back to breadcrumb text immediately before the part number while
-  filtering out `Keyword` noise. Availability strings are normalised from labels such as `Availability`,
-  `Orderable`, `Status`, and `Lifecycle` to consistent values like `Available`, `Not Orderable`,
-  `Obsolete`, `End of Life`, or `Replaced (<PN>)`.
-- **PartSurfer ShowPhoto.aspx** pulls the most meaningful text in the order `<title>` → nearby caption
-  headings (`h1`, `h2`, `.caption`, etc.) → `<img alt>`. When the search page is missing a title but the
-  photo page has one, the CLI backfills `PS_Title` using the photo caption. Photo misses explicitly set
-  `PSPhoto_Error` to `not found`.
-- **Buy HPE PDP** looks for titles in dynamic DOM nodes such as `h1.product-detail__name`,
-  `[data-testid="pdp_productTitle"]`, `meta[property="og:title"]`, and
-  `meta[name="twitter:title"]`. HTTP 200 responses that still fail to produce a title are treated as
-  misses, yielding `BUY_URL = "Product Not Found"` and `BUY_Error = "not found"` even when the page
-  returns an empty shell.
+  filtering out `Keyword`. Availability strings coming from `Availability`, `Orderable`, `Status`, or
+  `Lifecycle` rows are normalised to canonical values such as `Available`, `Not Orderable`, `Obsolete`,
+  `End of Life`, `Replaced (PN)`, `Out of Stock`, or `Information Only`.
+- **PartSurfer ShowPhoto.aspx** scans the document for `Part Description : ...` first, then evaluates
+  nearby captions/headings (`h1`, `h2`, `.caption`, etc.) before finally falling back to `<img alt>` text.
+  Placeholder messages (including `Product Description Not Available`) are ignored. When the photo page
+  exposes a meaningful title but Search does not, the CLI backfills `PS_Title` using the photo
+  description. Photo misses explicitly set `PSPhoto_Error = "not found"` while preserving
+  `PSPhoto_URL` for review.
+- **Buy HPE PDP** walks a selector cascade of `h1.product-detail__name`, `h1.pdp-product-name`,
+  `.product-detail__summary h1`, `.product__title`, and metadata (`meta[property="og:title"]`,
+  `meta[name="twitter:title"]`). Structured data (JSON-LD) still supplies SKU/URL/image/category
+  fallbacks. HTTP 200 responses with an empty DOM resolve to `BUY_URL = "Product Not Found"` and
+  `BUY_Error = "not found"`.
 - Provider success is now strictly `title && url`; when every provider fails the CLI emits
   `CHECK MANUALLY` markers (after applying the denylist/auto-correct flow described above).
+
+## Networking, retries, and logging
+
+- SKU normalisation uppercases input, collapses stray whitespace/dashes, expands known truncated suffixes (e.g. `B2` → `B21`), and restores hyphenated forms such as `P00930-B21`.
+- All outbound requests force HTTPS, strip tracking parameters, and send `User-Agent` plus `Accept-Language: en-US,en;q=0.8`. ShowPhoto and Buy HPE calls share the same timeout budget and retry up to the configured limit with exponential backoff (default 3 attempts).
+- `--concurrency <n>` limits simultaneous lookups (default 3), `--retry <count>` overrides the retry budget, and `--log-json <file>` writes structured JSONL records to `apps\hpe-partsurfer\logs\*.jsonl` with `ts, sku, provider, url, http, bytes, durationMs, retries, parseHint, success` fields.
+- CSV exports are emitted as UTF-8 with BOM; all values are trimmed and any embedded semicolons/newlines are escaped so spreadsheets remain aligned.
