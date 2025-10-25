@@ -18,7 +18,8 @@ describe('parsePhoto', () => {
     expect(result).toEqual({
       title: 'Optional Rack Rail Kit for ProLiant servers.',
       imageUrl: 'https://partsurfer.hpe.com/media/photos/af573a_large.jpg',
-      notFound: false
+      notFound: false,
+      manualCheck: false
     });
   });
 
@@ -29,7 +30,8 @@ describe('parsePhoto', () => {
     expect(result).toEqual({
       title: 'Optional Rack Rail Kit for ProLiant servers.',
       imageUrl: null,
-      notFound: false
+      notFound: false,
+      manualCheck: false
     });
   });
 
@@ -40,7 +42,8 @@ describe('parsePhoto', () => {
     expect(result).toEqual({
       title: null,
       imageUrl: null,
-      notFound: true
+      notFound: true,
+      manualCheck: false
     });
   });
 
@@ -51,7 +54,8 @@ describe('parsePhoto', () => {
     expect(result).toEqual({
       title: 'High-speed cooling fan module',
       imageUrl: 'https://partsurfer.hpe.com/media/photos/fan123_large.jpg',
-      notFound: false
+      notFound: false,
+      manualCheck: false
     });
   });
 
@@ -62,7 +66,8 @@ describe('parsePhoto', () => {
     expect(result).toEqual({
       title: 'HPE 64GB 2Rx4 PC4-2933Y-R Smart Kit',
       imageUrl: 'https://partsurfer.hpe.com/media/photos/memory_kit.jpg',
-      notFound: false
+      notFound: false,
+      manualCheck: false
     });
   });
 
@@ -73,7 +78,8 @@ describe('parsePhoto', () => {
     expect(result).toEqual({
       title: null,
       imageUrl: null,
-      notFound: true
+      notFound: true,
+      manualCheck: true
     });
   });
 });

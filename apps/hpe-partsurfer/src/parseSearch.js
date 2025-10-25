@@ -217,9 +217,12 @@ function extractSiblingValue($, labelElement) {
   return null;
 }
 
-function sanitizeDescription(value) {
+function sanitizeDescription(value, state) {
   const text = normalizeText(value);
   if (!text || NO_DESCRIPTION_PATTERN.test(text)) {
+    if (state && text) {
+      state.descriptionUnavailable = true;
+    }
     return '';
   }
 
@@ -448,31 +451,31 @@ function findDescriptionFromPairs($) {
   return null;
 }
 
-function findDescription($, detailsMap) {
-  const canonical = sanitizeDescription(getDetailValue(detailsMap, 'Part Description'));
+function findDescription($, detailsMap, state) {
+  const canonical = sanitizeDescription(getDetailValue(detailsMap, 'Part Description'), state);
   if (canonical) {
     return canonical;
   }
 
-  const detailsTable = sanitizeDescription(findDescriptionFromDetailsTable($));
+  const detailsTable = sanitizeDescription(findDescriptionFromDetailsTable($), state);
   if (detailsTable) {
     return detailsTable;
   }
 
   const direct = findFirstText($, DESCRIPTION_SELECTORS);
-  const sanitizedDirect = sanitizeDescription(direct);
+  const sanitizedDirect = sanitizeDescription(direct, state);
   if (sanitizedDirect) {
     return sanitizedDirect;
   }
 
   const fromPairs = findDescriptionFromPairs($);
-  const sanitizedPairs = sanitizeDescription(fromPairs);
+  const sanitizedPairs = sanitizeDescription(fromPairs, state);
   if (sanitizedPairs) {
     return sanitizedPairs;
   }
 
   const fromTable = findDescriptionFromTable($);
-  const sanitizedTable = sanitizeDescription(fromTable);
+  const sanitizedTable = sanitizeDescription(fromTable, state);
   if (sanitizedTable) {
     return sanitizedTable;
   }
@@ -486,7 +489,7 @@ function findDescription($, detailsMap) {
     const text = normalizeText(fallbackElement.text());
     const match = text.match(/^description\s*:\s*(.+)$/i);
     if (match && match[1]) {
-      const candidate = sanitizeDescription(match[1]);
+      const candidate = sanitizeDescription(match[1], state);
       if (candidate) {
         return candidate;
       }
@@ -1081,7 +1084,8 @@ export function parseSearch(html) {
   const notFound = !multipleResults && detectNoResults($);
 
   const detailsMap = buildDetailsMap($);
-  const description = multipleResults ? null : findDescription($, detailsMap);
+  const descriptionState = { descriptionUnavailable: false };
+  const description = multipleResults ? null : findDescription($, detailsMap, descriptionState);
   const category = description ? findCategory($, detailsMap) : findCategory($, detailsMap);
   const availability = multipleResults ? null : findAvailability($, detailsMap);
   const imageUrl = extractImageUrl($);
@@ -1089,6 +1093,7 @@ export function parseSearch(html) {
   const compatibleProducts = parseCompatibility($);
   const replacedBy = extractPartReference($, REPLACED_BY_PATTERNS);
   const substitute = extractPartReference($, SUBSTITUTE_PATTERNS);
+  const manualCheck = !multipleResults && !description && descriptionState.descriptionUnavailable === true;
 
   return {
     description: description || null,
@@ -1102,6 +1107,7 @@ export function parseSearch(html) {
     multipleResults,
     notFound,
     bomSectionFound: bom.sawContainer,
-    bomUnavailable: bom.sawNegative
+    bomUnavailable: bom.sawNegative,
+    manualCheck
   };
 }

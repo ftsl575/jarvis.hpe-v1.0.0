@@ -23,6 +23,10 @@ cd "C:\Users\G\Desktop\jarvis.hpe v1.0.0\apps\hpe-partsurfer"
 The batch file forwards the arguments to
 `node --experimental-vm-modules .\src\cliProcessInputList.mjs --in "%~1" --out "%~2"`.
 
+To tune retries or logging, append flags such as
+`--concurrency 4 --retry 2 --log-json` when invoking the script. JSON logs are written to
+`apps\hpe-partsurfer\logs` with one line per network hop.
+
 ## Output files
 
 Two CSV files are created in `C:\Users\G\Desktop\jarvis.hpe v1.0.0\input data` using the provided
@@ -45,7 +49,8 @@ product cannot be located the CSV now records `BUY_URL` as `Product Not Found`.
 
 For providers that return no data or throw errors, the corresponding `*_Error` column contains a short
 status such as `not found`, `CHECK MANUALLY`, or an error code while the other provider-specific
-columns remain empty.
+columns remain empty. Manual-review rows append ` (CHECK MANUALLY)` to the exported `PartNumber` and
+set `BUY_URL` to `Product Not Found` so reviewers can filter them quickly.
 
 When every provider misses on a `-002` spare, the CLI automatically retries with the `-001` suffix.
 Successful lookups keep the fetched provider data but annotate the exported `PartNumber` with
@@ -56,25 +61,26 @@ denylist (currently `804329-002`) skip auto-correction entirely and are emitted 
 ## Parser notes
 
 - **PartSurfer Search.aspx** now prefers the details table row whose label matches `Part Description`
-  (case-insensitive); the cell value is decoded and trimmed before overriding `PS_Title` unless it equals
-  `Product Description Not Available`. Category extraction first looks for `Product Category`/`Category`
-  in the same table, then falls back to breadcrumb text immediately before the part number while
-  filtering out `Keyword`. Availability strings coming from `Availability`, `Orderable`, `Status`, or
-  `Lifecycle` rows are normalised to canonical values such as `Available`, `Not Orderable`, `Obsolete`,
-  `End of Life`, `Replaced (PN)`, `Out of Stock`, or `Information Only`.
-- **PartSurfer ShowPhoto.aspx** scans the document for `Part Description : ...` first, then evaluates
-  nearby captions/headings (`h1`, `h2`, `.caption`, etc.) before finally falling back to `<img alt>` text.
-  Placeholder messages (including `Product Description Not Available`) are ignored. When the photo page
-  exposes a meaningful title but Search does not, the CLI backfills `PS_Title` using the photo
-  description. Photo misses explicitly set `PSPhoto_Error = "not found"` while preserving
-  `PSPhoto_URL` for review.
-- **Buy HPE PDP** walks a selector cascade of `h1.product-detail__name`, `h1.pdp-product-name`,
-  `.product-detail__summary h1`, `.product__title`, and metadata (`meta[property="og:title"]`,
-  `meta[name="twitter:title"]`). Structured data (JSON-LD) still supplies SKU/URL/image/category
-  fallbacks. HTTP 200 responses with an empty DOM resolve to `BUY_URL = "Product Not Found"` and
-  `BUY_Error = "not found"`.
-- Provider success is now strictly `title && url`; when every provider fails the CLI emits
-  `CHECK MANUALLY` markers (after applying the denylist/auto-correct flow described above).
+  (case-insensitive, including non-breaking spaces). Values are trimmed before overriding `PS_Title`;
+  if the cell equals `PRODUCT DESCRIPTION NOT AVAILABLE`, the row is escalated to `CHECK MANUALLY`.
+  Category extraction first looks for `Product Category`/`Category` in tables or labelled fields, then
+  falls back to summary metadata while filtering `Keyword`. Availability strings coming from
+  `Availability`, `Orderable`, `Status`, or `Lifecycle` rows are normalised to canonical values such as
+  `Available`, `Not Orderable`, `Obsolete`, `End of Life`, `Replaced (PN)`, `Out of Stock`, or
+  `Information Only`.
+- **PartSurfer ShowPhoto.aspx** uses a regex that matches `Part[\s\u00A0]*Description\s*:` before
+  considering nearby captions/headings (`h1`, `h2`, `.caption`, etc.) and finally `<img alt>` text.
+  Generic `<title>` values like `HPE PartSurfer` are ignored. The same placeholder message triggers a
+  manual check, and when only the photo exposes a meaningful title the CLI backfills `PS_Title` from
+  `PSPhoto_Title`.
+- **Buy HPE PDP** walks a selector cascade of `h1.pdp-product-name`, `h1.product-detail__name`,
+  `.product-detail__summary h1`, `.product__title`, `[data-testid="pdp_productTitle"]`, then metadata
+  (`meta[property="og:title"]`, `meta[name="twitter:title"]`). JSON-LD fallbacks read
+  `productName`, `baseProduct.productName`, `name`, or `headline`, and URLs/images/categories are
+  absolutised against the canonical link. Empty DOM responses short-circuit to `BUY_URL = "Product Not
+  Found"` so Buy success still requires a title **and** canonical URL.
+- Provider success is now strictly `title && url`; placeholder matches, denylisted parts, and all-provider
+  misses emit the existing `CHECK MANUALLY` markers after applying the auto-correct flow described above.
 
 ## Networking, retries, and logging
 

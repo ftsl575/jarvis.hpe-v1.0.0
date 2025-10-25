@@ -16,19 +16,32 @@ considered a success. Requests honour the shared timeout/retry budget and reuse 
 
 ## Parser strategy
 
-1. Parse JSON-LD payloads that expose `Product`/`Offer` schema nodes and normalise the core fields:
-   title, sku/partNumber, canonical URL, image, and category. (Price and availability values are
-   ignored to keep the export schema stable.)
+1. Parse JSON-LD payloads that expose `Product`/`Offer` schema nodes and normalise the core fields.
+   Title candidates now include `productName`, `baseProduct.productName`, `name`, `headline`, and
+   `title`. The parser still extracts SKU/partNumber identifiers, canonical URLs, images, and category
+   strings while ignoring price/availability fields to keep the export schema stable.
 2. Fallback to DOM heuristics when schema data is missing. The fallback walks a selector cascade in
    the following order and returns the first non-empty value:
-   - `h1.product-detail__name`
    - `h1.pdp-product-name`
+   - `h1.product-detail__name`
    - `.product-detail__summary h1`
    - `.product__title`
+   - `[data-testid="pdp_productTitle"]`
    - `meta[property="og:title"]`
    - `meta[name="twitter:title"]`
-   If every selector fails on a live page, the parser returns `null` and the provider records
+   Canonical URLs are resolved from `<link rel="canonical">` or `og:url`, normalised, and required for
+   success so the provider only returns payloads with both `title` and `url`. If every selector fails on
+   a live page—or the DOM is effectively empty—the parser returns `null` and the provider records
    `BUY_URL = "Product Not Found"` with `BUY_Error = "not found"`.
+
+### Examples
+
+- Working PDP: `/us/en/p/P00930-B21` exposes `h1.pdp-product-name`, a canonical link, and image meta,
+  yielding a complete payload with `HPE ProLiant DL380 Gen10 Server`.
+- Search fallback: `/us/en/search?q=R7K89A` links to a PDP whose breadcrumbs provide the
+  `Networking > Access Points > Wi-Fi 6E` category.
+- Empty template: pages that only render placeholders (e.g. blank CMS shells) trigger the `Product Not
+  Found` state even if they return HTTP 200.
 
 ## Provider flow
 

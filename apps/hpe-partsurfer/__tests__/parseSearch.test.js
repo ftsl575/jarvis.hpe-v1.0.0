@@ -30,7 +30,29 @@ describe('parseSearch', () => {
       multipleResults: false,
       notFound: false,
       bomSectionFound: true,
-      bomUnavailable: false
+      bomUnavailable: false,
+      manualCheck: false
+    });
+  });
+
+  test('extracts description, category, and availability from standard detail table', () => {
+    const html = loadFixture('search_875545.html');
+    const result = parseSearch(html);
+
+    expect(result).toEqual({
+      description: 'HPE System I/O Board',
+      category: 'System Boards',
+      availability: 'Obsolete',
+      imageUrl: 'https://partsurfer.hpe.com/media/photos/875545-001.jpg',
+      bomItems: [],
+      compatibleProducts: [],
+      replacedBy: null,
+      substitute: null,
+      multipleResults: false,
+      notFound: false,
+      bomSectionFound: false,
+      bomUnavailable: false,
+      manualCheck: false
     });
   });
 
@@ -50,7 +72,8 @@ describe('parseSearch', () => {
       multipleResults: true,
       notFound: false,
       bomSectionFound: false,
-      bomUnavailable: false
+      bomUnavailable: false,
+      manualCheck: false
     });
   });
 
@@ -70,7 +93,8 @@ describe('parseSearch', () => {
       multipleResults: false,
       notFound: false,
       bomSectionFound: true,
-      bomUnavailable: true
+      bomUnavailable: true,
+      manualCheck: false
     });
   });
 
@@ -94,7 +118,8 @@ describe('parseSearch', () => {
       multipleResults: false,
       notFound: false,
       bomSectionFound: false,
-      bomUnavailable: false
+      bomUnavailable: false,
+      manualCheck: false
     });
   });
 
@@ -114,7 +139,29 @@ describe('parseSearch', () => {
       multipleResults: false,
       notFound: false,
       bomSectionFound: false,
-      bomUnavailable: false
+      bomUnavailable: false,
+      manualCheck: false
+    });
+  });
+
+  test('marks manual check when description is unavailable placeholder', () => {
+    const html = loadFixture('search_description_unavailable.html');
+    const result = parseSearch(html);
+
+    expect(result).toEqual({
+      description: null,
+      category: 'Server Options',
+      availability: 'Available',
+      imageUrl: null,
+      bomItems: [],
+      compatibleProducts: [],
+      replacedBy: null,
+      substitute: null,
+      multipleResults: false,
+      notFound: false,
+      bomSectionFound: false,
+      bomUnavailable: false,
+      manualCheck: true
     });
   });
 });
