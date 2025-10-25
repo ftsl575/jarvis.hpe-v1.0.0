@@ -1,4 +1,7 @@
 import { describe, expect, test, beforeEach, afterEach, jest } from '@jest/globals';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const baseModule = await import('../src/cliProcessInputList.mjs');
 const {
@@ -8,6 +11,12 @@ const {
   allProvidersFailed,
   shouldAutoCorrect
 } = baseModule;
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+function loadFixture(name) {
+  return readFileSync(path.join(__dirname, 'fixtures', name), 'utf8');
+}
 
 function createRow(overrides = {}) {
   const row = {};
@@ -200,6 +209,27 @@ describe('processPart integration', () => {
     const denylisted = rows.find((row) => row.PartNumber.startsWith('804329-002'));
     expect(denylisted.BUY_Error).toBe('CHECK MANUALLY');
     expect(denylisted.PartNumber).toContain('CHECK MANUALLY');
+  });
+
+  test('marks manual check when description is unavailable', async () => {
+    const module = await importModuleWithMocks();
+    const { processPart } = module;
+
+    getSearchHtmlMock.mockResolvedValue(loadFixture('search_description_unavailable.html'));
+    getPhotoHtmlMock.mockResolvedValue('<html><body>Product Description Not Available</body></html>');
+    providerBuyHpeMock.mockResolvedValue({
+      title: 'Some product',
+      sku: '873580-001',
+      url: 'https://buy.hpe.com/us/en/p/873580-001'
+    });
+
+    const row = await processPart('873580-001', {});
+
+    expect(row.PartNumber).toBe('873580-001 (CHECK MANUALLY)');
+    expect(row.PS_Error).toBe('CHECK MANUALLY');
+    expect(row.PSPhoto_Error).toBe('CHECK MANUALLY');
+    expect(row.BUY_Error).toBe('CHECK MANUALLY');
+    expect(providerBuyHpeMock).not.toHaveBeenCalled();
   });
 });
 

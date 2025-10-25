@@ -75,13 +75,16 @@ function extractText($, element) {
   return normalizeText(element.text());
 }
 
-function sanitizeTitle(value) {
+function sanitizeTitle(value, context) {
   const text = normalizeText(value);
   if (!text) {
     return null;
   }
 
   if (NOT_AVAILABLE_PATTERN.test(text)) {
+    if (context) {
+      context.descriptionUnavailable = true;
+    }
     return null;
   }
 
@@ -144,7 +147,7 @@ function pickLongestMeaningful(candidates) {
   }, null);
 }
 
-function extractCaption($, imageElement) {
+function extractCaption($, imageElement, context) {
   if (!imageElement || imageElement.length === 0) {
     return null;
   }
@@ -163,7 +166,7 @@ function extractCaption($, imageElement) {
   const candidates = [];
   for (const container of containers) {
     container.find(CAPTION_SELECTOR_STRING).each((_, element) => {
-      const text = sanitizeTitle(extractText($, $(element)));
+      const text = sanitizeTitle(extractText($, $(element)), context);
       if (text) {
         candidates.push(text);
       }
@@ -178,7 +181,7 @@ function isNotFound($) {
   return NO_PHOTO_PATTERNS.some((pattern) => pattern.test(bodyText));
 }
 
-function extractNearbyTitle($, imageElement) {
+function extractNearbyTitle($, imageElement, context) {
   if (!imageElement || imageElement.length === 0) {
     return null;
   }
@@ -196,7 +199,7 @@ function extractNearbyTitle($, imageElement) {
 
     const candidates = [];
     container.find(NEARBY_SELECTOR_STRING).each((_, element) => {
-      const text = sanitizeTitle(extractText($, $(element)));
+      const text = sanitizeTitle(extractText($, $(element)), context);
       if (text) {
         candidates.push(text);
       }
@@ -212,7 +215,7 @@ function extractNearbyTitle($, imageElement) {
   return null;
 }
 
-function extractAltText(imageElement) {
+function extractAltText(imageElement, context) {
   if (!imageElement || imageElement.length === 0) {
     return null;
   }
@@ -222,10 +225,10 @@ function extractAltText(imageElement) {
     return null;
   }
 
-  return sanitizeTitle(alt);
+  return sanitizeTitle(alt, context);
 }
 
-function extractDescriptionFromBody($) {
+function extractDescriptionFromBody($, context) {
   const body = $('body').text();
   if (!body) {
     return null;
@@ -239,7 +242,7 @@ function extractDescriptionFromBody($) {
     }
     const match = normalized.match(PART_DESCRIPTION_PATTERN);
     if (match && match[1]) {
-      const candidate = sanitizeTitle(match[1]);
+      const candidate = sanitizeTitle(match[1], context);
       if (candidate) {
         return candidate;
       }
@@ -252,7 +255,7 @@ function extractDescriptionFromBody($) {
   }
   const inlineMatch = collapsed.match(PART_DESCRIPTION_PATTERN);
   if (inlineMatch && inlineMatch[1]) {
-    const candidate = sanitizeTitle(inlineMatch[1]);
+    const candidate = sanitizeTitle(inlineMatch[1], context);
     if (candidate) {
       return candidate;
     }
@@ -263,27 +266,27 @@ function extractDescriptionFromBody($) {
 
 export function parsePhoto(html) {
   if (!html) {
-    return { title: null, imageUrl: null, notFound: true };
+    return { title: null, imageUrl: null, notFound: true, manualCheck: false };
   }
 
   const $ = load(html);
 
   if (isNotFound($)) {
-    return { title: null, imageUrl: null, notFound: true };
+    return { title: null, imageUrl: null, notFound: true, manualCheck: false };
   }
 
   const bodyText = $('body').text() ?? '';
-  const descriptionUnavailable = NOT_AVAILABLE_PATTERN.test(bodyText);
-  const headTitle = sanitizeTitle($('head > title').first().text()) || null;
+  const context = { descriptionUnavailable: NOT_AVAILABLE_PATTERN.test(bodyText) };
+  const headTitle = sanitizeTitle($('head > title').first().text(), context) || null;
   const image = extractImage($);
-  const caption = image.element ? extractCaption($, image.element) : null;
-  const nearbyTitle = image.element ? extractNearbyTitle($, image.element) : null;
-  const bodyTitle = extractDescriptionFromBody($);
+  const caption = image.element ? extractCaption($, image.element, context) : null;
+  const nearbyTitle = image.element ? extractNearbyTitle($, image.element, context) : null;
+  const bodyTitle = extractDescriptionFromBody($, context);
 
   const globalCandidates = [];
   if (!caption || !nearbyTitle) {
     $(NEARBY_SELECTOR_STRING).each((_, element) => {
-      const text = sanitizeTitle(extractText($, $(element)));
+      const text = sanitizeTitle(extractText($, $(element)), context);
       if (text) {
         globalCandidates.push(text);
       }
@@ -292,7 +295,7 @@ export function parsePhoto(html) {
   }
 
   const globalTitle = pickLongestMeaningful(globalCandidates);
-  const altText = descriptionUnavailable ? null : extractAltText(image.element || $('img').first());
+  const altText = context.descriptionUnavailable ? null : extractAltText(image.element || $('img').first(), context);
 
   const title = bodyTitle
     || caption
@@ -303,11 +306,13 @@ export function parsePhoto(html) {
     || null;
 
   const imageUrl = image.url;
-  const notFound = descriptionUnavailable || (!title && !imageUrl);
+  const manualCheck = context.descriptionUnavailable === true;
+  const notFound = manualCheck || (!title && !imageUrl);
 
   return {
     title,
     imageUrl,
-    notFound
+    notFound,
+    manualCheck
   };
 }

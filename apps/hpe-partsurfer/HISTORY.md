@@ -1,5 +1,27 @@
 ## [Unreleased]
 
+### Final parser QA
+- **PS/Search**: prefer the details table row labelled `Part Description` for the title, normalise category
+  and availability values from both tables and field pairs, and trigger manual checks when the content is the
+  `PRODUCT DESCRIPTION NOT AVAILABLE` placeholder.
+- **PS/Photo**: capture descriptions from the `Part Description` regex or caption/nearby elements while
+  ignoring generic `<title>` values, fall back to alt text, surface the manual-check state on placeholder
+  copy, and backfill the search title when photo data is the only success path.
+- **Buy HPE**: expand the selector cascade (`h1.pdp-product-name`, `h1.product-detail__name`,
+  `.product-detail__summary h1`, `.product__title`, and metadata), add JSON-LD fallbacks (including
+  `productName`, `baseProduct.productName`, `name`, and `headline`), and treat empty templates as
+  `Product Not Found` so success requires both a title and canonical URL.
+- **Miss policy**: keep unified success checks, retain the `-002 → -001` autocorrect with the `804329-002`
+  denylist, and escalate placeholder descriptions to the existing `CHECK MANUALLY` flow.
+- **Normalisation & transport**: continue to canonicalise SKU/URL pairs, trim all provider fields, honour
+  retry/throttling settings, and send explicit request headers for consistent responses.
+- **Logging & artefacts**: persist JSONL network logs that include `parseHint` markers and keep writing
+  debug HTML snapshots for later analysis.
+- **CSV contract**: titles remain at the front of the export, files include a UTF-8 BOM, value escaping covers
+  commas/semicolons, and all providers share the exact `Product Not Found` string when URLs are missing.
+
+### Earlier updates
+
 - Added buy.hpe.com provider: fetch, parse, provider, CSV export, Windows-safe paths in tests.
 - Enabled buy.hpe.com in main aggregator.
 - Reordered batch CSV exports to prefix the key title columns, add a numeric index column, and

@@ -7,8 +7,8 @@ const SCHEMA_OFFER = 'offer';
 const DEFAULT_BASE_URL = 'https://buy.hpe.com/';
 
 const TITLE_SELECTORS = [
-  'h1.product-detail__name',
   'h1.pdp-product-name',
+  'h1.product-detail__name',
   '.product-detail__summary h1',
   '.product__title',
   '[data-testid="pdp_productTitle"]'
@@ -152,8 +152,15 @@ function parseJsonLd($, baseUrl) {
         const offer = pickOffer(node.offers ?? node.offer);
         const sku = coerceString(node.sku) || pickProductIdentifier(node);
         const partNumber = pickProductIdentifier(node) || sku;
+        const title =
+          coerceString(node.productName)
+          || coerceString(node.baseProduct?.productName)
+          || coerceString(node.name)
+          || coerceString(node.headline)
+          || coerceString(node.title)
+          || null;
         return {
-          title: coerceString(node.name) || coerceString(node.title) || null,
+          title,
           sku: sku || null,
           partNumber: partNumber || null,
           url: absolutize(coerceString(node.url), baseUrl),
@@ -304,6 +311,9 @@ export function parseBuyHpe(html, options = {}) {
   const partNumber = structured?.partNumber || sku || null;
   const fallbackUrl = typeof options.url === 'string' ? options.url : null;
   const url = resolveCanonicalUrl($, baseUrl, structured?.url || fallbackUrl);
+  if (!url) {
+    return null;
+  }
   const image = structured?.image || extractImage($, baseUrl) || null;
   const category = structured?.category || textFromMeta($, 'product:category') || textFromMeta($, 'og:category') || findFirstBreadcrumb($) || null;
 

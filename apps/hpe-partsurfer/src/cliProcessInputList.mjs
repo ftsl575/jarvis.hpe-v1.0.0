@@ -218,18 +218,24 @@ async function fetchPartSurfer(partNumber, options, row) {
     const parsed = parseSearch(html);
     if (!parsed || parsed.notFound) {
       row.PS_Error = 'not found';
-      return;
+      return false;
     }
     if (parsed.multipleResults) {
       row.PS_Error = 'multiple results';
-      return;
+      return false;
     }
     row.PS_Title = trimValue(parsed.description);
     row.PS_Category = trimValue(parsed.category);
     row.PS_Availability = trimValue(parsed.availability);
     row.PS_Image = parsed.imageUrl ? normalizeUrl(parsed.imageUrl) || parsed.imageUrl : '';
+    if (parsed.manualCheck) {
+      row._manualCheck = true;
+      row._manualCheckReason = row._manualCheckReason || 'PS';
+    }
+    return parsed.manualCheck === true;
   } catch (error) {
     row.PS_Error = error?.code || error?.status || error?.message || 'error';
+    return false;
   }
 }
 
@@ -247,12 +253,18 @@ async function fetchPartSurferPhoto(partNumber, options, row) {
     if (!row.PSPhoto_Title && !row.PSPhoto_Image) {
       row.PSPhoto_Error = row.PSPhoto_Error || 'not found';
     }
+    if (parsed.manualCheck) {
+      row._manualCheck = true;
+      row._manualCheckReason = row._manualCheckReason || 'PSPhoto';
+    }
+    return parsed.manualCheck === true;
   } catch (error) {
     if (error?.status === 404 || error?.status === 410 || error?.status === 403) {
       row.PSPhoto_Error = 'not found';
-      return;
+      return false;
     }
     row.PSPhoto_Error = error?.code || error?.status || error?.message || 'error';
+    return false;
   }
 }
 
@@ -311,9 +323,17 @@ async function buildRowForPart(partNumber, providerOptions) {
   if (!trimValue(row.PS_Title) && trimValue(row.PSPhoto_Title)) {
     row.PS_Title = trimValue(row.PSPhoto_Title);
   }
+
+  if (row._manualCheck) {
+    markCheckManually(row, partNumber);
+    return row;
+  }
+
   await fetchBuyHpe(partNumber, providerOptions, row);
 
   finaliseProviderStates(row);
+  delete row._manualCheck;
+  delete row._manualCheckReason;
   return row;
 }
 
@@ -343,6 +363,12 @@ async function processPart(partNumber, providerOptions) {
 
   const initialRow = await buildRowForPart(normalized, providerOptions);
 
+  if (initialRow._manualCheck) {
+    delete initialRow._manualCheck;
+    delete initialRow._manualCheckReason;
+    return initialRow;
+  }
+
   if (!allProvidersFailed(initialRow)) {
     return initialRow;
   }
@@ -350,8 +376,13 @@ async function processPart(partNumber, providerOptions) {
   if (shouldAutoCorrect(normalized)) {
     const alternate = normalized.replace(/-002$/, '-001');
     const alternateRow = await buildRowForPart(alternate, providerOptions);
+    if (alternateRow._manualCheck) {
+      delete alternateRow._manualCheck;
+      delete alternateRow._manualCheckReason;
+    }
     if (!allProvidersFailed(alternateRow)) {
-      alternateRow.PartNumber = `${normalized} (auto change ${alternate})`;
+      const manualSuffix = alternateRow.PartNumber.includes('CHECK MANUALLY') ? ' (CHECK MANUALLY)' : '';
+      alternateRow.PartNumber = `${normalized} (auto change ${alternate})${manualSuffix}`;
       return alternateRow;
     }
   }
