@@ -29,7 +29,7 @@ function resolveValue(record, key) {
     return '';
   }
   if (key === 'source') {
-    return 'HPE Buy';
+    return 'HPE Buy (buy.hpe.com)';
   }
   const value = record[key];
   if (value === undefined || value === null) {

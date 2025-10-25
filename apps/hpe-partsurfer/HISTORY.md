@@ -1,6 +1,7 @@
 ## [Unreleased]
 
 - Added buy.hpe.com provider: fetch, parse, provider, CSV export, Windows-safe paths in tests.
+- Enabled buy.hpe.com in main aggregator.
 
 ## v1.0.0-stable — October 2025
 
