@@ -1,10 +1,14 @@
-## v1.0.0-stable — October 2025
+## [Unreleased]
 
-- Стабильная работа CLI и API для поиска на HPE PartSurfer.
-- Поддерживаемые типы:
+- Added buy.hpe.com provider: fetch, parse, provider, CSV export, Windows-safe paths in tests.
+
+## v1.0.0-stable вЂ” October 2025
+
+- РЎС‚Р°Р±РёР»СЊРЅР°СЏ СЂР°Р±РѕС‚Р° CLI Рё API РґР»СЏ РїРѕРёСЃРєР° РЅР° HPE PartSurfer.
+- РџРѕРґРґРµСЂР¶РёРІР°РµРјС‹Рµ С‚РёРїС‹:
   - Option Kit Numbers (XXXXXX-B21)
   - SKU / Product Numbers (PXXXXX-B21, XXXXX-425)
-- Обработка Spare и Assembly частично реализована (тестовый режим).
-- Тесты 100% успешны (6/6 suites).
-- Реализован экспорт в Excel (.xlsx) с колонками.
-- Добавлен run_sample_parts.bat для Windows.
+- РћР±СЂР°Р±РѕС‚РєР° Spare Рё Assembly С‡Р°СЃС‚РёС‡РЅРѕ СЂРµР°Р»РёР·РѕРІР°РЅР° (С‚РµСЃС‚РѕРІС‹Р№ СЂРµР¶РёРј).
+- РўРµСЃС‚С‹ 100% СѓСЃРїРµС€РЅС‹ (6/6 suites).
+- Р РµР°Р»РёР·РѕРІР°РЅ СЌРєСЃРїРѕСЂС‚ РІ Excel (.xlsx) СЃ РєРѕР»РѕРЅРєР°РјРё.
+- Р”РѕР±Р°РІР»РµРЅ run_sample_parts.bat РґР»СЏ Windows.
