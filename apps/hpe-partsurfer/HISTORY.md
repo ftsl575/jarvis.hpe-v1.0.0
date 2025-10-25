@@ -2,6 +2,9 @@
 
 - Added buy.hpe.com provider: fetch, parse, provider, CSV export, Windows-safe paths in tests.
 - Enabled buy.hpe.com in main aggregator.
+- Reordered batch CSV exports to prefix the key title columns, add a numeric index column, and
+  normalise not-found states (auto-correction from `-002` to `-001`, `Product Not Found` URLs, and
+  `CHECK MANUALLY` fallbacks).
 
 ## v1.0.0-stable — October 2025
 
