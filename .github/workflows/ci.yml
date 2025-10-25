@@ -4,12 +4,13 @@ on:
   - pull_request
 
 jobs:
+  # Полный CI для обычных PR
   node:
+    if: ${{ !startsWith(github.event.pull_request.head.ref, 'release/') }}
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: apps/hpe-partsurfer
-
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,21 +22,13 @@ jobs:
       - name: Install dependencies
         run: npm ci || npm install
 
-      # Пропускаем CI для веток release/*
-      - name: Skip CI on release branches
-        if: ${{ startsWith(github.event.pull_request.head.ref, 'release/') }}
-        run: echo "Skipping lint/test/sample on release branches"
-
       - name: Lint
-        if: ${{ !startsWith(github.event.pull_request.head.ref, 'release/') }}
         run: npm run lint
 
       - name: Test
-        if: ${{ !startsWith(github.event.pull_request.head.ref, 'release/') }}
         run: npm test
 
       - name: Run sample
-        if: ${{ !startsWith(github.event.pull_request.head.ref, 'release/') }}
         run: npm run sample
 
       - name: Upload coverage
@@ -45,3 +38,9 @@ jobs:
           name: coverage
           path: apps/hpe-partsurfer/coverage
 
+  # Нулевой job для PR из release/*
+  release_ok:
+    if: ${{ startsWith(github.event.pull_request.head.ref, 'release/') }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Release PR detected → skipping lint/test/sample"
