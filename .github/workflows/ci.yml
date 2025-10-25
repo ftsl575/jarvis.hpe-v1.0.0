@@ -1,39 +1,29 @@
 name: CI
-
 on:
-  - pull_request
-
+  push:
+    branches: [ main, develop, "feature/*", "release/*" ]
+  pull_request:
+    branches: [ main, develop ]
 jobs:
-  node:
-    if: ${{ !startsWith(github.event.pull_request.head.ref, 'release/') }}
+  build-test:
+    if: "!startsWith(github.ref, 'refs/heads/release/')"
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/hpe-partsurfer
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: apps/hpe-partsurfer/package-lock.json
-      - name: Install dependencies
-        run: npm ci || npm install
-      - name: Lint
-        run: npm run lint
-      - name: Test
-        run: npm test
-      - name: Run sample
-        run: npm run sample
-      - name: Upload coverage
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage
-          path: apps/hpe-partsurfer/coverage
-
-  release_ok:
-    if: ${{ startsWith(github.event.pull_request.head.ref, 'release/') }}
+          node-version: ${{ matrix.node-version }}
+      - run: npm ci
+      - run: npm run db:migrate
+      - run: npm run lint
+      - run: npm test
+      - run: npm run api:check
+  release:
+    if: startsWith(github.ref, 'refs/heads/release/')
     runs-on: ubuntu-latest
     steps:
-      - run: echo "Release PR detected → skipping lint/test/sample"
+      - uses: actions/checkout@v4
+      - run: echo "Skipping lint/test on release branch by policy"
