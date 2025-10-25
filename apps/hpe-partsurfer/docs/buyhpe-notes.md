@@ -25,15 +25,25 @@ conservative retry strategy and honours the shared configuration flags such as `
 
 The provider first requests `/[locale]/p/<SKU>` (default locale is `us/en`). If the product page
 cannot be parsed or returns a `404`, the provider fetches `/[locale]/search?q=<SKU>` and pulls the
-first product card link before re-running the parser. Successful results include `source: "HPE Buy"`
-and an additional `fetchedFrom` field indicating whether the direct or search fallback succeeded.
+first product card link before re-running the parser. Successful results include
+`source: "HPE Buy (buy.hpe.com)"` and an additional `fetchedFrom` field indicating whether the direct
+or search fallback succeeded.
+
+## Aggregator integration
+
+- The main aggregation pipeline resolves PartSurfer metadata first and only then invokes the
+  buy.hpe.com provider, preserving both payloads in the emitted list.
+- buy.hpe.com entries always expose `source: "HPE Buy (buy.hpe.com)"` so downstream
+  classification stays aligned with the supported source taxonomy.
+- Part numbers are normalised once prior to executing the provider chain to keep duplicate SKUs
+  from triggering redundant requests.
 
 ## CSV export helper
 
 `exportCsvBuyHpe` accepts one or multiple parsed product records and writes both comma-separated and
-semicolon-separated files to `apps/hpe-partsurfer/sample_results.csv` and
-`apps/hpe-partsurfer/sample_results_semicolon.csv`. Values are normalised and quoted when necessary,
-with a static `source` column populated as `HPE Buy`.
+ semicolon-separated files to `apps/hpe-partsurfer/sample_results.csv` and
+ `apps/hpe-partsurfer/sample_results_semicolon.csv`. Values are normalised and quoted when necessary,
+ with a static `source` column populated as `HPE Buy (buy.hpe.com)`.
 
 ## Local sampling
 

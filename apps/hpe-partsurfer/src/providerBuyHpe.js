@@ -91,7 +91,7 @@ async function fetchProduct(urlOrPath, fetchOptions, sku) {
   if (!parsed) {
     return null;
   }
-  return { ...parsed, source: 'HPE Buy' };
+  return { ...parsed, source: 'HPE Buy (buy.hpe.com)' };
 }
 
 export async function providerBuyHpe(sku, options = {}) {
