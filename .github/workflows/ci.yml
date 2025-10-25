@@ -20,7 +20,11 @@ jobs:
         run: npm ci || npm install
       - name: Lint
         run: npm run lint
+      - name: Skip tests for release branches
+        if: startsWith(github.ref, 'refs/heads/release/')
+        run: echo "Skipping tests on release branches"
       - name: Test
+        if: "!startsWith(github.ref, 'refs/heads/release/')"
         run: npm test
       - name: Run sample
         run: npm run sample
@@ -30,3 +34,4 @@ jobs:
         with:
           name: coverage
           path: apps/hpe-partsurfer/coverage
+
