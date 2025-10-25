@@ -2,10 +2,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import pLimit from 'p-limit';
 import { getSearchHtml, getPhotoHtml } from './fetch.js';
 import { parseSearch } from './parseSearch.js';
 import { parsePhoto } from './parsePhoto.js';
-import { normalizePartNumber } from './normalize.js';
+import { normalizePartNumber, normalizeUrl } from './normalize.js';
 import { providerBuyHpe } from './providerBuyHpe.js';
 
 const DEFAULT_INPUT_PATH = 'C:\\Users\\G\\Desktop\\jarvis.hpe v1.0.0\\input data\\list1.txt';
@@ -40,6 +41,7 @@ const BOM = '\uFEFF';
 const BUY_NOT_FOUND_URL = 'Product Not Found';
 const HTTP_URL_PATTERN = /^https?:\/\//i;
 const DENYLIST = new Set(['804329-002']);
+const DEFAULT_CONCURRENCY = 3;
 
 function parseArgs(argv) {
   const options = {};
@@ -56,6 +58,20 @@ function parseArgs(argv) {
       options.live = true;
     } else if (current === '--no-live') {
       options.live = false;
+    } else if (current === '--concurrency') {
+      const value = Number(argv[index + 1]);
+      if (Number.isFinite(value)) {
+        options.concurrency = value;
+      }
+      index += 1;
+    } else if (current === '--retry') {
+      const value = Number(argv[index + 1]);
+      if (Number.isFinite(value)) {
+        options.retry = value;
+      }
+      index += 1;
+    } else if (current === '--log-json') {
+      options.logJson = true;
     }
   }
 
@@ -139,21 +155,29 @@ function isHttpUrl(value) {
   return HTTP_URL_PATTERN.test(value.trim());
 }
 
+function trimValue(value) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  return value.trim();
+}
+
 function hasPsData(row) {
-  const title = row.PS_Title ? row.PS_Title.trim() : '';
-  const url = row.PS_URL ? row.PS_URL.trim() : '';
+  const title = trimValue(row.PS_Title);
+  const url = trimValue(row.PS_URL);
   return Boolean(title && isHttpUrl(url));
 }
 
 function hasPhotoData(row) {
-  const title = row.PSPhoto_Title ? row.PSPhoto_Title.trim() : '';
-  const url = row.PSPhoto_URL ? row.PSPhoto_URL.trim() : '';
-  return Boolean(title && isHttpUrl(url));
+  const title = trimValue(row.PSPhoto_Title);
+  const image = trimValue(row.PSPhoto_Image);
+  const url = trimValue(row.PSPhoto_URL);
+  return Boolean((title || image) && isHttpUrl(url));
 }
 
 function hasBuyData(row) {
-  const title = row.BUY_Title ? row.BUY_Title.trim() : '';
-  const url = row.BUY_URL ? row.BUY_URL.trim() : '';
+  const title = trimValue(row.BUY_Title);
+  const url = trimValue(row.BUY_URL);
   return Boolean(title && isHttpUrl(url));
 }
 
@@ -187,7 +211,8 @@ function normalizePart(raw) {
 
 async function fetchPartSurfer(partNumber, options, row) {
   row.PS_SKU = partNumber;
-  row.PS_URL = `${DEFAULT_SEARCH_BASE}${encodeQuery(partNumber)}`;
+  const searchUrl = `${DEFAULT_SEARCH_BASE}${encodeQuery(partNumber)}`;
+  row.PS_URL = normalizeUrl(searchUrl) || searchUrl;
   try {
     const html = await getSearchHtml(partNumber, options);
     const parsed = parseSearch(html);
@@ -199,13 +224,10 @@ async function fetchPartSurfer(partNumber, options, row) {
       row.PS_Error = 'multiple results';
       return;
     }
-    row.PS_Title = parsed.description ? parsed.description.trim() : '';
-    row.PS_Category = parsed.category ?? '';
-    row.PS_Availability = parsed.availability ?? '';
-    if (!row.PS_Availability && Array.isArray(parsed.bomItems) && parsed.bomItems.length > 0) {
-      row.PS_Availability = `BOM items: ${parsed.bomItems.length}`;
-    }
-    row.PS_Image = parsed.imageUrl ?? '';
+    row.PS_Title = trimValue(parsed.description);
+    row.PS_Category = trimValue(parsed.category);
+    row.PS_Availability = trimValue(parsed.availability);
+    row.PS_Image = parsed.imageUrl ? normalizeUrl(parsed.imageUrl) || parsed.imageUrl : '';
   } catch (error) {
     row.PS_Error = error?.code || error?.status || error?.message || 'error';
   }
@@ -213,20 +235,18 @@ async function fetchPartSurfer(partNumber, options, row) {
 
 async function fetchPartSurferPhoto(partNumber, options, row) {
   row.PSPhoto_SKU = partNumber;
-  row.PSPhoto_URL = `${DEFAULT_PHOTO_BASE}${encodeQuery(partNumber)}`;
+  const photoUrl = `${DEFAULT_PHOTO_BASE}${encodeQuery(partNumber)}`;
+  row.PSPhoto_URL = normalizeUrl(photoUrl) || photoUrl;
   try {
-    const html = await getPhotoHtml(partNumber, options);
-    const { title, imageUrl } = parsePhoto(html);
-    const normalizedTitle = title ? title.trim() : '';
-    if (!normalizedTitle) {
-      row.PSPhoto_Title = '';
-      row.PSPhoto_Image = '';
+    const parsed = parsePhoto(await getPhotoHtml(partNumber, options));
+    row.PSPhoto_Title = trimValue(parsed.title);
+    row.PSPhoto_Image = parsed.imageUrl ? normalizeUrl(parsed.imageUrl) || parsed.imageUrl : '';
+    if (parsed.notFound) {
       row.PSPhoto_Error = 'not found';
-      return;
     }
-
-    row.PSPhoto_Title = normalizedTitle;
-    row.PSPhoto_Image = imageUrl ? imageUrl : '';
+    if (!row.PSPhoto_Title && !row.PSPhoto_Image) {
+      row.PSPhoto_Error = row.PSPhoto_Error || 'not found';
+    }
   } catch (error) {
     if (error?.status === 404 || error?.status === 410 || error?.status === 403) {
       row.PSPhoto_Error = 'not found';
@@ -239,15 +259,16 @@ async function fetchPartSurferPhoto(partNumber, options, row) {
 async function fetchBuyHpe(partNumber, options, row) {
   try {
     const payload = await providerBuyHpe(partNumber, options);
-    if (!payload) {
+    if (!payload || !payload.title || !payload.url) {
       row.BUY_URL = BUY_NOT_FOUND_URL;
       row.BUY_Error = 'not found';
       return;
     }
-    row.BUY_Title = payload.title ?? '';
-    row.BUY_SKU = payload.sku ?? payload.partNumber ?? partNumber;
-    row.BUY_URL = payload.url ?? '';
-    row.BUY_Image = payload.image ?? '';
+    row.BUY_Title = trimValue(payload.title);
+    row.BUY_SKU = trimValue(payload.sku || payload.partNumber || partNumber);
+    row.BUY_URL = normalizeUrl(payload.url) || payload.url;
+    row.BUY_Image = payload.image ? normalizeUrl(payload.image) || payload.image : '';
+    row.BUY_Error = '';
   } catch (error) {
     if (error?.status === 404 || error?.status === 410 || error?.status === 403) {
       row.BUY_URL = BUY_NOT_FOUND_URL;
@@ -261,16 +282,21 @@ async function fetchBuyHpe(partNumber, options, row) {
 function finaliseProviderStates(row) {
   if (!hasPsData(row)) {
     row.PS_Error = row.PS_Error || 'not found';
+  } else {
+    row.PS_Error = row.PS_Error && row.PS_Error !== 'not found' ? row.PS_Error : '';
   }
 
   if (!hasPhotoData(row)) {
     row.PSPhoto_Error = row.PSPhoto_Error || 'not found';
+  } else if (row.PSPhoto_Error === 'not found') {
+    row.PSPhoto_Error = '';
   }
 
   if (!hasBuyData(row)) {
-    const url = row.BUY_URL ? row.BUY_URL.trim() : '';
-    row.BUY_URL = isHttpUrl(url) ? url : BUY_NOT_FOUND_URL;
+    row.BUY_URL = isHttpUrl(row.BUY_URL) ? row.BUY_URL : BUY_NOT_FOUND_URL;
     row.BUY_Error = row.BUY_Error || 'not found';
+  } else if (row.BUY_Error === 'not found') {
+    row.BUY_Error = '';
   }
 }
 
@@ -282,8 +308,8 @@ async function buildRowForPart(partNumber, providerOptions) {
 
   await fetchPartSurfer(partNumber, providerOptions, row);
   await fetchPartSurferPhoto(partNumber, providerOptions, row);
-  if ((!row.PS_Title || !row.PS_Title.trim()) && row.PSPhoto_Title && row.PSPhoto_Title.trim()) {
-    row.PS_Title = row.PSPhoto_Title.trim();
+  if (!trimValue(row.PS_Title) && trimValue(row.PSPhoto_Title)) {
+    row.PS_Title = trimValue(row.PSPhoto_Title);
   }
   await fetchBuyHpe(partNumber, providerOptions, row);
 
@@ -297,13 +323,16 @@ async function processPart(partNumber, providerOptions) {
   row.PS_SKU = normalized;
   row.PSPhoto_SKU = normalized;
   row.BUY_SKU = normalized;
-  row.PS_URL = `${DEFAULT_SEARCH_BASE}${encodeQuery(normalized)}`;
-  row.PSPhoto_URL = `${DEFAULT_PHOTO_BASE}${encodeQuery(normalized)}`;
+  const searchUrl = `${DEFAULT_SEARCH_BASE}${encodeQuery(normalized)}`;
+  const photoUrl = `${DEFAULT_PHOTO_BASE}${encodeQuery(normalized)}`;
+  row.PS_URL = normalizeUrl(searchUrl) || searchUrl;
+  row.PSPhoto_URL = normalizeUrl(photoUrl) || photoUrl;
 
   if (error) {
     row.PS_Error = error;
     row.PSPhoto_Error = error;
     row.BUY_Error = error;
+    row.BUY_URL = BUY_NOT_FOUND_URL;
     return row;
   }
 
@@ -344,24 +373,68 @@ async function ensureOutputDirectory(prefix) {
   await fs.mkdir(directory, { recursive: true });
 }
 
+function resolveConcurrency(value) {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_CONCURRENCY;
+  }
+  const integer = Math.max(1, Math.floor(value));
+  return integer;
+}
+
+function resolveRetryCount(value) {
+  if (!Number.isFinite(value)) {
+    return undefined;
+  }
+  const integer = Math.max(0, Math.floor(value));
+  return integer;
+}
+
+async function createJsonLogger(enabled) {
+  if (!enabled) {
+    return null;
+  }
+  const logDir = path.resolve(process.cwd(), 'logs');
+  await fs.mkdir(logDir, { recursive: true });
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const filePath = path.join(logDir, `batch-${timestamp}.jsonl`);
+  let chain = Promise.resolve();
+
+  return {
+    filePath,
+    log(entry) {
+      const payload = `${JSON.stringify(entry)}\n`;
+      chain = chain.then(() => fs.appendFile(filePath, payload, 'utf8')).catch(() => {});
+      return chain;
+    }
+  };
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const inputPath = resolvePath(args.in ?? DEFAULT_INPUT_PATH);
   const outputPrefix = resolvePath(args.out ?? DEFAULT_OUTPUT_PREFIX);
   const live = typeof args.live === 'boolean' ? args.live : true;
+  const concurrency = resolveConcurrency(args.concurrency);
+  const retryCount = resolveRetryCount(args.retry);
+  const logger = await createJsonLogger(args.logJson === true);
 
   if (!live) {
     console.warn('Live mode disabled; providers may fail if network access is required.');
   }
 
   const items = await readInputList(inputPath);
-  const providerOptions = { live };
-  const rows = [];
-
-  for (const item of items) {
-    const row = await processPart(item, providerOptions);
-    rows.push(row);
+  const providerOptions = {
+    live
+  };
+  if (Number.isFinite(retryCount)) {
+    providerOptions.retries = retryCount;
   }
+  if (logger) {
+    providerOptions.logger = logger;
+  }
+
+  const limit = pLimit(concurrency);
+  const rows = await Promise.all(items.map((item) => limit(() => processPart(item, providerOptions))));
 
   rows.forEach((row, index) => {
     row['#'] = String(index + 1);
@@ -379,6 +452,9 @@ async function main() {
 
   console.log(`Wrote ${rows.length} rows to ${commaPath}`);
   console.log(`Wrote ${rows.length} rows to ${semicolonPath}`);
+  if (logger?.filePath) {
+    console.log(`Structured log: ${logger.filePath}`);
+  }
 }
 
 const isMain = (() => {
@@ -399,5 +475,6 @@ export {
   toCsvValue,
   allProvidersFailed,
   shouldAutoCorrect,
-  processPart
+  processPart,
+  main
 };

@@ -2,10 +2,10 @@
 
 ## Overview
 
-The Buy HPE integration adds a lightweight fetcher, parser, and provider that extract pricing
-information for public SKU pages. It uses the native `fetch` available in Node.js 18+ with a
-conservative retry strategy and honours the shared configuration flags such as `LIVE_MODE` and
-`USER_AGENT`.
+The Buy HPE integration fetches product detail pages, extracts descriptive metadata (title, SKU,
+canonical URL, image, category), and reports whether the page contained enough information to be
+considered a success. Requests honour the shared timeout/retry budget and reuse the global
+`User-Agent`/`Accept-Language` headers.
 
 ## Fetch behaviour
 
@@ -17,17 +17,26 @@ conservative retry strategy and honours the shared configuration flags such as `
 ## Parser strategy
 
 1. Parse JSON-LD payloads that expose `Product`/`Offer` schema nodes and normalise the core fields:
-   title, price, priceCurrency, availability, sku/partNumber, canonical URL, image, and category.
-2. Fallback to DOM heuristics when schema data is missing. The fallback looks at Open Graph tags,
-   breadcrumb navigation, price widgets, and inline availability strings.
+   title, sku/partNumber, canonical URL, image, and category. (Price and availability values are
+   ignored to keep the export schema stable.)
+2. Fallback to DOM heuristics when schema data is missing. The fallback walks a selector cascade in
+   the following order and returns the first non-empty value:
+   - `h1.product-detail__name`
+   - `h1.pdp-product-name`
+   - `.product-detail__summary h1`
+   - `.product__title`
+   - `meta[property="og:title"]`
+   - `meta[name="twitter:title"]`
+   If every selector fails on a live page, the parser returns `null` and the provider records
+   `BUY_URL = "Product Not Found"` with `BUY_Error = "not found"`.
 
 ## Provider flow
 
 The provider first requests `/[locale]/p/<SKU>` (default locale is `us/en`). If the product page
-cannot be parsed or returns a `404`, the provider fetches `/[locale]/search?q=<SKU>` and pulls the
-first product card link before re-running the parser. Successful results include
-`source: "HPE Buy (buy.hpe.com)"` and an additional `fetchedFrom` field indicating whether the direct
-or search fallback succeeded.
+cannot be parsed (including empty-DOM responses) or returns a `404`, the provider fetches
+`/[locale]/search?q=<SKU>` and pulls the first product card link before re-running the parser.
+Successful results include `source: "HPE Buy (buy.hpe.com)"` and an additional `fetchedFrom` field
+indicating whether the direct or search fallback succeeded.
 
 ## Aggregator integration
 
@@ -37,10 +46,9 @@ or search fallback succeeded.
   classification stays aligned with the supported source taxonomy.
 - Part numbers are normalised once prior to executing the provider chain to keep duplicate SKUs
   from triggering redundant requests.
-- When both the direct product lookup and the fallback search miss, the batch export records
-  `BUY_URL` as `Product Not Found` and surfaces `BUY_Error = not found` so manual follow-up is obvious.
-- The companion batch helper also captures the `<title>` element from `ShowPhoto.aspx` to populate
-  `PSPhoto_Title` while retaining the `PSPhoto_URL` even when an image cannot be fetched.
+- When both the direct product lookup and the fallback search miss (or the DOM is empty), the batch
+  export records `BUY_URL = "Product Not Found"` and surfaces `BUY_Error = "not found"` so manual
+  follow-up is obvious.
 
 ## CSV export helper
 

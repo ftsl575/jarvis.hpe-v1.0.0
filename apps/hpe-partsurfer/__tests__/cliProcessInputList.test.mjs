@@ -202,3 +202,72 @@ describe('processPart integration', () => {
     expect(denylisted.PartNumber).toContain('CHECK MANUALLY');
   });
 });
+
+describe('main concurrency and logging', () => {
+  const originalArgv = process.argv;
+  let logSpy;
+
+  beforeEach(() => {
+    logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    process.argv = originalArgv;
+    logSpy.mockRestore();
+    jest.resetModules();
+  });
+
+  test('applies concurrency flag to p-limit and writes CSV outputs', async () => {
+    jest.resetModules();
+    const pLimitFactory = jest.fn((max) => (task) => task());
+    jest.unstable_mockModule('p-limit', () => ({ default: pLimitFactory }));
+
+    const searchHtml = '<html><body><table><tr><th>Part Description</th><td>Test Description</td></tr></table></body></html>';
+    const photoHtml = '<html><body><p>Part Description : Test Photo</p><img src="/media/photos/test.jpg" /></body></html>';
+
+    jest.unstable_mockModule('../src/fetch.js', () => ({
+      getSearchHtml: jest.fn().mockResolvedValue(searchHtml),
+      getPhotoHtml: jest.fn().mockResolvedValue(photoHtml)
+    }));
+
+    jest.unstable_mockModule('../src/providerBuyHpe.js', () => ({
+      providerBuyHpe: jest.fn().mockResolvedValue({
+        title: 'Buy Title',
+        sku: 'SKU123',
+        partNumber: 'SKU123',
+        url: 'https://buy.hpe.com/us/en/p/SKU123',
+        image: 'https://buy.hpe.com/media/sku123.jpg',
+        category: 'Servers'
+      }),
+      default: jest.fn()
+    }));
+
+    const readFileMock = jest.fn().mockResolvedValue('P00000-B21\nP00001-B21\n');
+    const writeFileMock = jest.fn();
+    const mkdirMock = jest.fn();
+    const appendFileMock = jest.fn().mockResolvedValue();
+
+    jest.unstable_mockModule('node:fs/promises', () => ({
+      __esModule: true,
+      default: {
+        readFile: readFileMock,
+        writeFile: writeFileMock,
+        mkdir: mkdirMock,
+        appendFile: appendFileMock
+      },
+      readFile: readFileMock,
+      writeFile: writeFileMock,
+      mkdir: mkdirMock,
+      appendFile: appendFileMock
+    }));
+
+    process.argv = ['node', 'cliProcessInputList.mjs', '--in', 'input.txt', '--out', 'output', '--concurrency', '2', '--log-json'];
+
+    const module = await import('../src/cliProcessInputList.mjs');
+    await module.main();
+
+    expect(pLimitFactory).toHaveBeenCalledWith(2);
+    expect(writeFileMock).toHaveBeenCalledTimes(2);
+    expect(mkdirMock).toHaveBeenCalled();
+  });
+});

@@ -1,6 +1,8 @@
 import { load } from 'cheerio';
 import { absolutizeUrl, collapseWhitespace, normalizeText } from './normalize.js';
 
+const NO_DESCRIPTION_PATTERN = /^product description not available$/i;
+
 const DESCRIPTION_SELECTORS = [
   '#ctl00_BodyContentPlaceHolder_lblPartDescription',
   '#ctl00_BodyContentPlaceHolder_lblDescription',
@@ -213,6 +215,15 @@ function extractSiblingValue($, labelElement) {
   }
 
   return null;
+}
+
+function sanitizeDescription(value) {
+  const text = normalizeText(value);
+  if (!text || NO_DESCRIPTION_PATTERN.test(text)) {
+    return '';
+  }
+
+  return text;
 }
 
 function normalizeDetailLabel(value) {
@@ -438,29 +449,32 @@ function findDescriptionFromPairs($) {
 }
 
 function findDescription($, detailsMap) {
-  const canonical = getDetailValue(detailsMap, 'Part Description');
+  const canonical = sanitizeDescription(getDetailValue(detailsMap, 'Part Description'));
   if (canonical) {
     return canonical;
   }
 
-  const detailsTable = findDescriptionFromDetailsTable($);
+  const detailsTable = sanitizeDescription(findDescriptionFromDetailsTable($));
   if (detailsTable) {
     return detailsTable;
   }
 
   const direct = findFirstText($, DESCRIPTION_SELECTORS);
-  if (direct) {
-    return direct;
+  const sanitizedDirect = sanitizeDescription(direct);
+  if (sanitizedDirect) {
+    return sanitizedDirect;
   }
 
   const fromPairs = findDescriptionFromPairs($);
-  if (fromPairs) {
-    return fromPairs;
+  const sanitizedPairs = sanitizeDescription(fromPairs);
+  if (sanitizedPairs) {
+    return sanitizedPairs;
   }
 
   const fromTable = findDescriptionFromTable($);
-  if (fromTable) {
-    return fromTable;
+  const sanitizedTable = sanitizeDescription(fromTable);
+  if (sanitizedTable) {
+    return sanitizedTable;
   }
 
   const fallbackElement = $('body')
@@ -472,7 +486,10 @@ function findDescription($, detailsMap) {
     const text = normalizeText(fallbackElement.text());
     const match = text.match(/^description\s*:\s*(.+)$/i);
     if (match && match[1]) {
-      return match[1].trim();
+      const candidate = sanitizeDescription(match[1]);
+      if (candidate) {
+        return candidate;
+      }
     }
   }
 
@@ -654,7 +671,7 @@ function normalizeAvailabilityValue(value) {
     if (withDigits) {
       return `Replaced (${withDigits.toUpperCase()})`;
     }
-    return 'Replaced';
+    return 'Replaced (PN)';
   }
 
   if (/end\s*of\s*life/.test(lower) || /\bEOL\b/i.test(value)) {
@@ -663,6 +680,14 @@ function normalizeAvailabilityValue(value) {
 
   if (/obsolete/.test(lower) || /discontinued/.test(lower)) {
     return 'Obsolete';
+  }
+
+  if (/out\s*of\s*stock/.test(lower) || /back ?order/.test(lower)) {
+    return 'Out of Stock';
+  }
+
+  if (/information\s+only/.test(lower)) {
+    return 'Information Only';
   }
 
   if (/not\s*(?:orderable|available|for sale|supported)/.test(lower) || /^no$/i.test(text) || /^n\/?a$/i.test(text)) {

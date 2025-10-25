@@ -1,6 +1,17 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from '@jest/globals';
+import axios from 'axios';
 import nock from 'nock';
 import { getPhotoHtml, getSearchHtml } from '../src/fetch.js';
+
+async function axiosFetch(url) {
+  const response = await axios.get(url.toString(), { responseType: 'text', proxy: false });
+  return {
+    ok: response.status >= 200 && response.status < 300,
+    status: response.status,
+    url: response.request.res.responseUrl,
+    text: async () => response.data
+  };
+}
 
 beforeAll(() => {
   nock.disableNetConnect();
@@ -33,7 +44,7 @@ describe('fetch module', () => {
       .query({ partnumber: 'AF573A' })
       .reply(200, '<html>photo</html>');
 
-    const html = await getPhotoHtml('AF573A', { live: true });
+    const html = await getPhotoHtml('AF573A', { live: true, fetch: axiosFetch });
     expect(html).toBe('<html>photo</html>');
     expect(scope.isDone()).toBe(true);
   });

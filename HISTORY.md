@@ -5,6 +5,7 @@
 - Multi-source aggregator and 3-column CSV export (PartSurfer, Photo, BuyHpe)
 - Fixed run_sample_buyhpe.bat path and added ESM sample runner.
 - Added Input Data batch processor for list1.txt with combined PartSurfer, PartSurfer Photo, and HPE Buy output.
+- Normalize PS/Photo/Buy parsers with table/caption extraction, selector cascade, empty-DOM not-found handling, SKU/URL normalisation, retries/throttling, JSON logs, and unified success criteria.
 
 ## 2025-10-25
 - feat(csv): add classify_sources.ps1 to normalize source labels and use semicolon delimiter
