@@ -1,5 +1,10 @@
 # Development History — HPE PartSurfer Project
 
+## 2025-10-25
+- feat(csv): add classify_sources.ps1 to normalize source labels and use semicolon delimiter
+- fix(source): improve source classification and batch conversion
+- chore(git): add .gitignore to exclude generated CSV/XLSX and debug folders
+
 ## 2025-10-23 → 2025-10-24
 1. Репозиторий `ftsl575/jarvis.hpe-v1.0.0` инициализирован как копия `georgeglessner/HPEPartSurfer`.
 2. Настроен GitHub Actions (CI + automerge).
