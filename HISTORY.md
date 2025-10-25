@@ -1,5 +1,9 @@
 # Development History — HPE PartSurfer Project
 
+## [Unreleased]
+### Added
+- Multi-source aggregator and 3-column CSV export (PartSurfer, Photo, BuyHpe)
+
 ## 2025-10-25
 - feat(csv): add classify_sources.ps1 to normalize source labels and use semicolon delimiter
 - fix(source): improve source classification and batch conversion

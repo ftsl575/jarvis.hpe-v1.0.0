@@ -1,4 +1,6 @@
 ﻿# Ignore generated result files
 apps/hpe-partsurfer/*.csv
+!apps/hpe-partsurfer/sample_results.csv
+!apps/hpe-partsurfer/sample_results_semicolon.csv
 apps/hpe-partsurfer/*.xlsx
 apps/hpe-partsurfer/debug/
