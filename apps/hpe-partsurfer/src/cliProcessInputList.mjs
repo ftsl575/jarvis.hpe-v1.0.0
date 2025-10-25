@@ -162,10 +162,33 @@ function trimValue(value) {
   return value.trim();
 }
 
+function normalizeForComparison(value) {
+  return trimValue(value).replace(/\s+/g, '').toUpperCase();
+}
+
+function isTitleEqualToSku(title, sku) {
+  if (!title || !sku) {
+    return false;
+  }
+  return normalizeForComparison(title) === normalizeForComparison(sku);
+}
+
+function hasMeaningfulTitle(title, sku) {
+  const trimmed = trimValue(title);
+  if (!trimmed) {
+    return false;
+  }
+  if (sku && isTitleEqualToSku(trimmed, sku)) {
+    return false;
+  }
+  return true;
+}
+
 function hasPsData(row) {
   const title = trimValue(row.PS_Title);
+  const sku = trimValue(row.PS_SKU || row.PartNumber);
   const url = trimValue(row.PS_URL);
-  return Boolean(title && isHttpUrl(url));
+  return Boolean(hasMeaningfulTitle(title, sku) && isHttpUrl(url));
 }
 
 function hasPhotoData(row) {
@@ -282,9 +305,14 @@ async function fetchBuyHpe(partNumber, options, row) {
     row.BUY_Image = payload.image ? normalizeUrl(payload.image) || payload.image : '';
     row.BUY_Error = '';
   } catch (error) {
-    if (error?.status === 404 || error?.status === 410 || error?.status === 403) {
+    if (error?.status === 404 || error?.status === 410) {
       row.BUY_URL = BUY_NOT_FOUND_URL;
       row.BUY_Error = 'not found';
+      return;
+    }
+    if (error?.status === 403 || error?.status === 429) {
+      row.BUY_URL = BUY_NOT_FOUND_URL;
+      row.BUY_Error = 'CHECK MANUALLY';
       return;
     }
     row.BUY_Error = error?.code || error?.status || error?.message || 'error';
@@ -320,8 +348,10 @@ async function buildRowForPart(partNumber, providerOptions) {
 
   await fetchPartSurfer(partNumber, providerOptions, row);
   await fetchPartSurferPhoto(partNumber, providerOptions, row);
-  if (!trimValue(row.PS_Title) && trimValue(row.PSPhoto_Title)) {
-    row.PS_Title = trimValue(row.PSPhoto_Title);
+  const psTitle = trimValue(row.PS_Title);
+  const photoTitle = trimValue(row.PSPhoto_Title);
+  if ((!hasMeaningfulTitle(psTitle, row.PS_SKU) || !psTitle) && hasMeaningfulTitle(photoTitle, row.PS_SKU)) {
+    row.PS_Title = photoTitle;
   }
 
   if (row._manualCheck) {

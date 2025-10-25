@@ -5,7 +5,13 @@ import { log } from './logger.js';
 const DEFAULT_BASE_URL = 'https://buy.hpe.com/';
 const DEFAULT_TIMEOUT_MS = 12_000;
 const DEFAULT_RETRIES = 2;
-const DEFAULT_USER_AGENT = config.USER_AGENT ?? 'Mozilla/5.0 (compatible; HPEPartSurferBot/1.0)';
+const DEFAULT_USER_AGENT = config.USER_AGENT ?? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0 Safari/537.36';
+const USER_AGENT_POOL = [
+  DEFAULT_USER_AGENT,
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Safari/605.1.15',
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0 Safari/537.36',
+  'Mozilla/5.0 (iPad; CPU OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1'
+];
 
 function logNetworkEvent(options, payload) {
   const logger = options?.logger;
@@ -74,6 +80,41 @@ function computeDelay(attempt) {
   return base * 2 ** attempt;
 }
 
+function resolveUserAgents(options) {
+  const pool = [];
+
+  if (Array.isArray(options.userAgents)) {
+    for (const entry of options.userAgents) {
+      if (typeof entry === 'string' && entry.trim()) {
+        pool.push(entry.trim());
+      }
+    }
+  }
+
+  if (typeof options.userAgent === 'string' && options.userAgent.trim()) {
+    pool.unshift(options.userAgent.trim());
+  }
+
+  for (const candidate of USER_AGENT_POOL) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      pool.push(candidate.trim());
+    }
+  }
+
+  const unique = [];
+  for (const entry of pool) {
+    if (!unique.includes(entry)) {
+      unique.push(entry);
+    }
+  }
+
+  if (unique.length === 0) {
+    unique.push(DEFAULT_USER_AGENT);
+  }
+
+  return unique;
+}
+
 function cleanupAbort(signal, handler) {
   if (signal && handler) {
     signal.removeEventListener('abort', handler);
@@ -93,7 +134,7 @@ export async function fetchBuyHpe(target, options = {}) {
   const url = resolveUrl(target, baseUrl);
   const retries = Number.isFinite(options.retries) ? Math.max(0, options.retries) : DEFAULT_RETRIES;
   const timeoutMs = Number.isFinite(options.timeoutMs) ? Math.max(1, options.timeoutMs) : DEFAULT_TIMEOUT_MS;
-  const userAgent = typeof options.userAgent === 'string' && options.userAgent.trim() ? options.userAgent.trim() : DEFAULT_USER_AGENT;
+  const userAgents = resolveUserAgents(options);
 
   let attempt = 0;
   let lastError;
@@ -119,13 +160,14 @@ export async function fetchBuyHpe(target, options = {}) {
 
     try {
       const started = Date.now();
-      log.info('Fetching buy.hpe.com resource', { url, attempt: attempt + 1 });
+      const userAgent = userAgents[attempt % userAgents.length];
+      log.info('Fetching buy.hpe.com resource', { url, attempt: attempt + 1, userAgent });
       const response = await fetchImpl(url, {
         method: 'GET',
         headers: {
           'user-agent': userAgent,
           accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'accept-language': 'en-US,en;q=0.8'
+          'accept-language': 'en-US,en;q=0.9'
         },
         redirect: 'follow',
         signal: controller.signal

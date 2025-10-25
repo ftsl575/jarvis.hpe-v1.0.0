@@ -1,5 +1,5 @@
 import { load } from 'cheerio';
-import { absolutizeUrl, collapseWhitespace, normalizeText } from './normalize.js';
+import { absolutizeUrl, collapseWhitespace, normalizeDescription, normalizeText } from './normalize.js';
 
 const CAPTION_SELECTORS = ['figcaption', '.ps-photo-caption', '.photo-caption', '.caption'];
 const CAPTION_SELECTOR_STRING = CAPTION_SELECTORS.join(',');
@@ -52,7 +52,7 @@ const NO_PHOTO_PATTERNS = [
 ];
 
 const PART_DESCRIPTION_PATTERN = /part description\s*[:：]\s*(.+)/i;
-const NOT_AVAILABLE_PATTERN = /product description not available/i;
+const DESCRIPTION_PLACEHOLDER_PATTERN = /product description not available/i;
 
 function isPlaceholderUrl(url) {
   if (!url) {
@@ -76,15 +76,8 @@ function extractText($, element) {
 }
 
 function sanitizeTitle(value, context) {
-  const text = normalizeText(value);
+  const text = normalizeDescription(value, context);
   if (!text) {
-    return null;
-  }
-
-  if (NOT_AVAILABLE_PATTERN.test(text)) {
-    if (context) {
-      context.descriptionUnavailable = true;
-    }
     return null;
   }
 
@@ -237,7 +230,7 @@ function extractDescriptionFromBody($, context) {
   const lines = body.split(/\r?\n|\r/);
   for (const line of lines) {
     const normalized = collapseWhitespace(line);
-    if (NOT_AVAILABLE_PATTERN.test(normalized)) {
+    if (DESCRIPTION_PLACEHOLDER_PATTERN.test(normalized)) {
       continue;
     }
     const match = normalized.match(PART_DESCRIPTION_PATTERN);
@@ -250,7 +243,7 @@ function extractDescriptionFromBody($, context) {
   }
 
   const collapsed = collapseWhitespace(body);
-  if (NOT_AVAILABLE_PATTERN.test(collapsed)) {
+  if (DESCRIPTION_PLACEHOLDER_PATTERN.test(collapsed)) {
     return null;
   }
   const inlineMatch = collapsed.match(PART_DESCRIPTION_PATTERN);
@@ -276,7 +269,7 @@ export function parsePhoto(html) {
   }
 
   const bodyText = $('body').text() ?? '';
-  const context = { descriptionUnavailable: NOT_AVAILABLE_PATTERN.test(bodyText) };
+  const context = { descriptionUnavailable: DESCRIPTION_PLACEHOLDER_PATTERN.test(bodyText) };
   const headTitle = sanitizeTitle($('head > title').first().text(), context) || null;
   const image = extractImage($);
   const caption = image.element ? extractCaption($, image.element, context) : null;

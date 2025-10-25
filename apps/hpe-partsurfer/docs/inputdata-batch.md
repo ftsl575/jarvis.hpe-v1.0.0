@@ -85,6 +85,6 @@ denylist (currently `804329-002`) skip auto-correction entirely and are emitted 
 ## Networking, retries, and logging
 
 - SKU normalisation uppercases input, collapses stray whitespace/dashes, expands known truncated suffixes (e.g. `B2` → `B21`), and restores hyphenated forms such as `P00930-B21`.
-- All outbound requests force HTTPS, strip tracking parameters, and send `User-Agent` plus `Accept-Language: en-US,en;q=0.8`. ShowPhoto and Buy HPE calls share the same timeout budget and retry up to the configured limit with exponential backoff (default 3 attempts).
+- All outbound requests force HTTPS, strip tracking parameters, rotate through a small pool of `User-Agent` strings, and send `Accept-Language: en-US,en;q=0.9`. ShowPhoto and Buy HPE calls share the same timeout budget and retry up to the configured limit with exponential backoff (default 3 attempts).
 - `--concurrency <n>` limits simultaneous lookups (default 3), `--retry <count>` overrides the retry budget, and `--log-json <file>` writes structured JSONL records to `apps\hpe-partsurfer\logs\*.jsonl` with `ts, sku, provider, url, http, bytes, durationMs, retries, parseHint, success` fields.
 - CSV exports are emitted as UTF-8 with BOM; all values are trimmed and any embedded semicolons/newlines are escaped so spreadsheets remain aligned.

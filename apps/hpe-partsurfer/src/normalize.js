@@ -2,6 +2,11 @@ const HPE_BASE_URL = 'https://partsurfer.hpe.com/';
 
 const TRACKING_PARAM_PATTERN = /^(utm_|cid$|cmpid$|gclid$|s_kwcid$|icid$)/i;
 const DASH_VARIANTS = /[\u2010-\u2015\u2212]/g;
+const NBSP_PATTERN = /\u00A0/g;
+const DESCRIPTION_PLACEHOLDER_PATTERNS = [
+  { pattern: /^product description not available$/i, markUnavailable: true },
+  { pattern: /^hpe\s+partsurfer(?:\s*(?:photo|image))?$/i, markUnavailable: false }
+];
 const SUFFIX_EXPANSIONS = new Map([
   ['B2', 'B21']
 ]);
@@ -15,7 +20,7 @@ export function collapseWhitespace(value) {
     return '';
   }
 
-  return value.replace(/\s+/g, ' ').trim();
+  return value.replace(NBSP_PATTERN, ' ').replace(/\s+/g, ' ').trim();
 }
 
 const NAMED_ENTITIES = new Map([
@@ -69,6 +74,24 @@ export function normalizeText(value) {
   }
 
   return collapseWhitespace(decodeHtmlEntities(value));
+}
+
+export function normalizeDescription(value, state) {
+  const text = normalizeText(value);
+  if (!text) {
+    return '';
+  }
+
+  for (const { pattern, markUnavailable } of DESCRIPTION_PLACEHOLDER_PATTERNS) {
+    if (pattern.test(text)) {
+      if (state && markUnavailable) {
+        state.descriptionUnavailable = true;
+      }
+      return '';
+    }
+  }
+
+  return text;
 }
 
 function normalizeHttpProtocol(url) {
