@@ -27,6 +27,8 @@ const IMAGE_SELECTORS = [
   '.ps-photo img',
   '.photo-card__image img',
   '.photo-container img',
+  'figure img',
+  'img[src]',
   'img[data-large]',
   'img[data-original]',
   'img[data-src]',
@@ -170,12 +172,13 @@ export function parsePhoto(html) {
     return { description: null, imageUrl: null };
   }
 
+  const headTitle = normalizeText($('head > title').first().text()) || null;
   const directDescription = findFirstText($, DESCRIPTION_SELECTORS);
   const image = extractImage($);
   const caption = image.element ? extractCaption($, image.element) : null;
   const fallbackDescription = findFallbackDescription($);
 
-  const description = directDescription || caption || fallbackDescription || null;
+  const description = headTitle || directDescription || caption || fallbackDescription || null;
 
   return {
     description,

@@ -267,6 +267,50 @@ function findDescriptionFromTable($) {
   return null;
 }
 
+function extractDetailsTableValue($, cells, labelCell) {
+  const remaining = cells.filter((_, cell) => cell !== labelCell.get(0));
+  const directValue = remaining
+    .filter((_, cell) => normalizeText($(cell).text()).length > 0)
+    .first();
+
+  if (directValue && directValue.length > 0) {
+    return normalizeText(directValue.text());
+  }
+
+  const nestedText = normalizeText(remaining.text());
+  return nestedText || null;
+}
+
+function findDescriptionFromDetailsTable($) {
+  const tables = $('table').toArray();
+
+  for (const tableElement of tables) {
+    const table = $(tableElement);
+    const rows = table.find('tr').toArray();
+
+    for (const rowElement of rows) {
+      const row = $(rowElement);
+      const cells = row.children('th,td');
+      if (!cells || cells.length < 2) {
+        continue;
+      }
+
+      const labelCell = cells.first();
+      const labelText = normalizeText(labelCell.text());
+      if (!/part\s*description/i.test(labelText)) {
+        continue;
+      }
+
+      const value = extractDetailsTableValue($, cells, labelCell);
+      if (value) {
+        return value;
+      }
+    }
+  }
+
+  return null;
+}
+
 function findDescriptionFromPairs($) {
   const containerSelectors = [
     '.ps-field',
@@ -331,6 +375,11 @@ function findDescriptionFromPairs($) {
 }
 
 function findDescription($) {
+  const detailsTable = findDescriptionFromDetailsTable($);
+  if (detailsTable) {
+    return detailsTable;
+  }
+
   const direct = findFirstText($, DESCRIPTION_SELECTORS);
   if (direct) {
     return direct;

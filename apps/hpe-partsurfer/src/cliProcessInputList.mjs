@@ -2,10 +2,10 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { load } from 'cheerio';
 import { getSearchHtml, getPhotoHtml } from './fetch.js';
 import { parseSearch } from './parseSearch.js';
-import { absolutizeUrl, normalizePartNumber, normalizeText } from './normalize.js';
+import { parsePhoto } from './parsePhoto.js';
+import { normalizePartNumber } from './normalize.js';
 import { providerBuyHpe } from './providerBuyHpe.js';
 
 const DEFAULT_INPUT_PATH = 'C:\\Users\\G\\Desktop\\jarvis.hpe v1.0.0\\input data\\list1.txt';
@@ -38,7 +38,7 @@ const WINDOWS_BACKSLASH_PATTERN = /\\/;
 const EOL = '\r\n';
 const BOM = '\uFEFF';
 const BUY_NOT_FOUND_URL = 'Product Not Found';
-const PHOTO_PLACEHOLDER_PATTERN = /imagenotfound|placeholder|noimage/i;
+const HTTP_URL_PATTERN = /^https?:\/\//i;
 const DENYLIST = new Set(['804329-002']);
 
 function parseArgs(argv) {
@@ -131,53 +131,30 @@ function buildCsvContent(rows, delimiter) {
   return `${BOM}${lines.join(EOL)}${EOL}`;
 }
 
-function extractPhotoDetails(html) {
-  if (!html) {
-    return { title: '', image: '' };
+function isHttpUrl(value) {
+  if (typeof value !== 'string') {
+    return false;
   }
 
-  const $ = load(html);
-  const title = normalizeText($('title').first().text());
-  const imageElement = $('img')
-    .filter((_, element) => {
-      const src = $(element).attr('src');
-      if (typeof src !== 'string') {
-        return false;
-      }
-      const trimmed = src.trim();
-      if (!trimmed) {
-        return false;
-      }
-      return !PHOTO_PLACEHOLDER_PATTERN.test(trimmed);
-    })
-    .first();
-
-  if (!imageElement || imageElement.length === 0) {
-    return { title, image: '' };
-  }
-
-  const rawSrc = imageElement.attr('src') ?? '';
-  const normalized = rawSrc.trim();
-  const absolute = absolutizeUrl(normalized);
-  return { title, image: absolute || normalized };
+  return HTTP_URL_PATTERN.test(value.trim());
 }
 
 function hasPsData(row) {
-  return Boolean((row.PS_Title && row.PS_Title.trim())
-    || (row.PS_Category && row.PS_Category.trim())
-    || (row.PS_Image && row.PS_Image.trim()));
+  const title = row.PS_Title ? row.PS_Title.trim() : '';
+  const url = row.PS_URL ? row.PS_URL.trim() : '';
+  return Boolean(title && isHttpUrl(url));
 }
 
 function hasPhotoData(row) {
-  return Boolean((row.PSPhoto_Title && row.PSPhoto_Title.trim())
-    || (row.PSPhoto_Image && row.PSPhoto_Image.trim()));
+  const title = row.PSPhoto_Title ? row.PSPhoto_Title.trim() : '';
+  const url = row.PSPhoto_URL ? row.PSPhoto_URL.trim() : '';
+  return Boolean(title && isHttpUrl(url));
 }
 
 function hasBuyData(row) {
-  if (row.BUY_URL && row.BUY_URL.trim() && row.BUY_URL.trim() !== BUY_NOT_FOUND_URL) {
-    return true;
-  }
-  return Boolean((row.BUY_Title && row.BUY_Title.trim()) || (row.BUY_Image && row.BUY_Image.trim()));
+  const title = row.BUY_Title ? row.BUY_Title.trim() : '';
+  const url = row.BUY_URL ? row.BUY_URL.trim() : '';
+  return Boolean(title && isHttpUrl(url));
 }
 
 function allProvidersFailed(row) {
@@ -238,9 +215,11 @@ async function fetchPartSurferPhoto(partNumber, options, row) {
   row.PSPhoto_URL = `${DEFAULT_PHOTO_BASE}${encodeQuery(partNumber)}`;
   try {
     const html = await getPhotoHtml(partNumber, options);
-    const { title, image } = extractPhotoDetails(html);
-    const hasTitle = title && title.length > 0;
-    const hasImage = image && image.length > 0;
+    const { description, imageUrl } = parsePhoto(html);
+    const title = description ? description : '';
+    const image = imageUrl ? imageUrl : '';
+    const hasTitle = title.length > 0;
+    const hasImage = image.length > 0;
     if (!hasTitle && !hasImage) {
       row.PSPhoto_Error = 'not found';
       return;
@@ -279,15 +258,17 @@ async function fetchBuyHpe(partNumber, options, row) {
 }
 
 function finaliseProviderStates(row) {
-  if (!row.PS_Title && !row.PS_Category && !row.PS_Image) {
+  if (!hasPsData(row)) {
     row.PS_Error = row.PS_Error || 'not found';
   }
-  if (!row.PSPhoto_Title && !row.PSPhoto_Image) {
+
+  if (!hasPhotoData(row)) {
     row.PSPhoto_Error = row.PSPhoto_Error || 'not found';
   }
-  const buyUrl = row.BUY_URL ? row.BUY_URL.trim() : '';
-  if (!row.BUY_Title && !row.BUY_Image && (!buyUrl || buyUrl === BUY_NOT_FOUND_URL)) {
-    row.BUY_URL = buyUrl || BUY_NOT_FOUND_URL;
+
+  if (!hasBuyData(row)) {
+    const url = row.BUY_URL ? row.BUY_URL.trim() : '';
+    row.BUY_URL = isHttpUrl(url) ? url : BUY_NOT_FOUND_URL;
     row.BUY_Error = row.BUY_Error || 'not found';
   }
 }
@@ -312,11 +293,18 @@ async function processPart(partNumber, providerOptions) {
   row.PS_SKU = normalized;
   row.PSPhoto_SKU = normalized;
   row.BUY_SKU = normalized;
+  row.PS_URL = `${DEFAULT_SEARCH_BASE}${encodeQuery(normalized)}`;
+  row.PSPhoto_URL = `${DEFAULT_PHOTO_BASE}${encodeQuery(normalized)}`;
 
   if (error) {
     row.PS_Error = error;
     row.PSPhoto_Error = error;
     row.BUY_Error = error;
+    return row;
+  }
+
+  if (DENYLIST.has(normalized)) {
+    markCheckManually(row, normalized);
     return row;
   }
 
@@ -406,5 +394,6 @@ export {
   buildCsvContent,
   toCsvValue,
   allProvidersFailed,
-  shouldAutoCorrect
+  shouldAutoCorrect,
+  processPart
 };
