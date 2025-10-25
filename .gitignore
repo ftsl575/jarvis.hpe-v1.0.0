@@ -1,0 +1,4 @@
+﻿# Ignore generated result files
+apps/hpe-partsurfer/*.csv
+apps/hpe-partsurfer/*.xlsx
+apps/hpe-partsurfer/debug/
