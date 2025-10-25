@@ -215,6 +215,69 @@ function extractSiblingValue($, labelElement) {
   return null;
 }
 
+function normalizeDetailLabel(value) {
+  const text = normalizeText(value);
+  if (!text) {
+    return '';
+  }
+
+  return text.replace(/\s*[:：]\s*$/u, '').trim();
+}
+
+function buildDetailsMap($) {
+  const map = new Map();
+
+  $('table').each((_, tableElement) => {
+    const table = $(tableElement);
+    const rows = table.find('tr').toArray();
+
+    for (const rowElement of rows) {
+      const row = $(rowElement);
+      const cells = row.children('th,td');
+      if (!cells || cells.length < 2) {
+        continue;
+      }
+
+      const labelCell = cells.first();
+      const label = normalizeDetailLabel(labelCell.text());
+      if (!label) {
+        continue;
+      }
+
+      const valueCells = cells.slice(1).toArray();
+      const parts = valueCells
+        .map((cell) => normalizeText($(cell).text()))
+        .filter((text) => Boolean(text));
+      if (parts.length === 0) {
+        continue;
+      }
+
+      const value = parts.join(' ').trim();
+      if (!value) {
+        continue;
+      }
+
+      const key = label.toLowerCase();
+      if (!map.has(key)) {
+        map.set(key, value);
+      }
+    }
+  });
+
+  return map;
+}
+
+function getDetailValue(detailsMap, ...labels) {
+  for (const label of labels) {
+    const key = label.trim().toLowerCase();
+    if (detailsMap.has(key)) {
+      return detailsMap.get(key) || null;
+    }
+  }
+
+  return null;
+}
+
 function findDescriptionFromTable($) {
   const tables = $('table').toArray();
   for (const tableElement of tables) {
@@ -374,7 +437,12 @@ function findDescriptionFromPairs($) {
   return null;
 }
 
-function findDescription($) {
+function findDescription($, detailsMap) {
+  const canonical = getDetailValue(detailsMap, 'Part Description');
+  if (canonical) {
+    return canonical;
+  }
+
   const detailsTable = findDescriptionFromDetailsTable($);
   if (detailsTable) {
     return detailsTable;
@@ -475,23 +543,224 @@ function findCategoryFromPairs($) {
   return null;
 }
 
-function findCategory($) {
+function normalizeCategoryValue(value) {
+  const stripped = stripCategoryLabel(value);
+  if (!stripped) {
+    return '';
+  }
+
+  if (/^keywords?$/i.test(stripped)) {
+    return '';
+  }
+
+  return stripped;
+}
+
+const BREADCRUMB_SELECTORS = [
+  '[aria-label="Breadcrumb"]',
+  'nav.breadcrumb',
+  'nav[aria-label="breadcrumb"]',
+  'ol.breadcrumb',
+  'ul.breadcrumb',
+  '.breadcrumb'
+];
+
+function findBreadcrumbCategory($) {
+  for (const selector of BREADCRUMB_SELECTORS) {
+    const breadcrumb = $(selector).first();
+    if (!breadcrumb || breadcrumb.length === 0) {
+      continue;
+    }
+
+    const items = [];
+    breadcrumb.find('a, span, li').each((_, element) => {
+      const text = normalizeText($(element).text());
+      if (text) {
+        items.push(text.trim());
+      }
+    });
+
+    if (items.length === 0) {
+      continue;
+    }
+
+    const partIndex = items.findIndex((item) => PART_NUMBER_PATTERN.test(item));
+    if (partIndex > 0) {
+      const candidate = normalizeCategoryValue(items[partIndex - 1]);
+      if (candidate) {
+        return candidate;
+      }
+    }
+  }
+
+  return null;
+}
+
+function findCategory($, detailsMap) {
+  const detailCategory = getDetailValue(detailsMap, 'Product Category', 'Category');
+  const normalizedDetail = normalizeCategoryValue(detailCategory);
+  if (normalizedDetail) {
+    return normalizedDetail;
+  }
+
   const direct = findFirstText($, CATEGORY_SELECTORS);
   if (direct) {
-    return stripCategoryLabel(direct);
+    const normalized = normalizeCategoryValue(direct);
+    if (normalized) {
+      return normalized;
+    }
   }
 
   const fromPairs = findCategoryFromPairs($);
   if (fromPairs) {
-    return fromPairs;
+    const normalizedPairs = normalizeCategoryValue(fromPairs);
+    if (normalizedPairs) {
+      return normalizedPairs;
+    }
   }
 
   const metaTag = $('meta[name="product:category"], meta[property="og:category"], meta[name="category"], meta[name="product-category"]').first();
   if (metaTag && metaTag.length > 0) {
-    const content = stripCategoryLabel(metaTag.attr('content'));
+    const content = normalizeCategoryValue(metaTag.attr('content'));
     if (content) {
       return content;
     }
+  }
+
+  const breadcrumb = findBreadcrumbCategory($);
+  if (breadcrumb) {
+    return breadcrumb;
+  }
+
+  return null;
+}
+
+function normalizeAvailabilityValue(value) {
+  const normalized = normalizeText(value);
+  if (!normalized) {
+    return null;
+  }
+
+  const text = normalized.trim();
+  if (!text) {
+    return null;
+  }
+
+  const lower = text.toLowerCase();
+
+  if (/replace/.test(lower)) {
+    const candidates = String(value).match(/[A-Z0-9]{3,10}(?:-[A-Z0-9]{2,8})?/gi) || [];
+    const withDigits = candidates.find((candidate) => /\d/.test(candidate));
+    if (withDigits) {
+      return `Replaced (${withDigits.toUpperCase()})`;
+    }
+    return 'Replaced';
+  }
+
+  if (/end\s*of\s*life/.test(lower) || /\bEOL\b/i.test(value)) {
+    return 'End of Life';
+  }
+
+  if (/obsolete/.test(lower) || /discontinued/.test(lower)) {
+    return 'Obsolete';
+  }
+
+  if (/not\s*(?:orderable|available|for sale|supported)/.test(lower) || /^no$/i.test(text) || /^n\/?a$/i.test(text)) {
+    return 'Not Orderable';
+  }
+
+  if (/available/.test(lower) || /orderable/.test(lower) || /^yes$/i.test(text) || /active/.test(lower)) {
+    return 'Available';
+  }
+
+  return text;
+}
+
+function findAvailabilityFromPairs($) {
+  const selectors = [
+    '.ps-field',
+    '.ps-attribute',
+    '.ps-detail-row',
+    '.ps-part-attribute',
+    '.field-row',
+    '.part-summary__row'
+  ];
+
+  const labelSelectors = '.ps-field-label, .field-label, .ps-label, .label, .heading, .ps-part-attribute__label';
+  const valueSelectors = '.ps-field-value, .field-value, .ps-value, .value, .content, .ps-part-attribute__value, .ps-field-text';
+
+  for (const selector of selectors) {
+    const container = $(selector);
+    if (!container || container.length === 0) {
+      continue;
+    }
+
+    let result = null;
+    container.each((_, element) => {
+      const wrapper = $(element);
+      const label = normalizeDetailLabel(wrapper.find(labelSelectors).first().text());
+      if (!label) {
+        return undefined;
+      }
+
+      if (!/^(availability|orderable|status|lifecycle)$/i.test(label)) {
+        return undefined;
+      }
+
+      const valueText = normalizeText(wrapper.find(valueSelectors).first().text());
+      const normalized = normalizeAvailabilityValue(valueText);
+      if (normalized) {
+        result = normalized;
+        return false;
+      }
+
+      return undefined;
+    });
+
+    if (result) {
+      return result;
+    }
+  }
+
+  const dt = $('dt').filter((_, el) => {
+    const text = normalizeDetailLabel($(el).text());
+    return /^(availability|orderable|status|lifecycle)$/i.test(text);
+  }).first();
+
+  if (dt && dt.length > 0) {
+    const dd = dt.nextAll('dd').filter((_, el) => normalizeText($(el).text()).length > 0).first();
+    const normalized = normalizeAvailabilityValue(dd.text());
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  const labelElement = $('span, strong, label, div, th, td').filter((_, el) => {
+    const text = normalizeDetailLabel($(el).text());
+    return /^(availability|orderable|status|lifecycle)$/i.test(text);
+  }).first();
+
+  if (labelElement && labelElement.length > 0) {
+    const value = extractSiblingValue($, labelElement);
+    const normalized = normalizeAvailabilityValue(value);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return null;
+}
+
+function findAvailability($, detailsMap) {
+  const detailValue = getDetailValue(detailsMap, 'Availability', 'Orderable', 'Status', 'Lifecycle');
+  const normalizedDetail = normalizeAvailabilityValue(detailValue);
+  if (normalizedDetail) {
+    return normalizedDetail;
+  }
+
+  const fromPairs = findAvailabilityFromPairs($);
+  if (fromPairs) {
+    return fromPairs;
   }
 
   return null;
@@ -786,8 +1055,10 @@ export function parseSearch(html) {
   const multipleResults = detectMultipleResults($);
   const notFound = !multipleResults && detectNoResults($);
 
-  const description = multipleResults ? null : findDescription($);
-  const category = description ? findCategory($) : findCategory($);
+  const detailsMap = buildDetailsMap($);
+  const description = multipleResults ? null : findDescription($, detailsMap);
+  const category = description ? findCategory($, detailsMap) : findCategory($, detailsMap);
+  const availability = multipleResults ? null : findAvailability($, detailsMap);
   const imageUrl = extractImageUrl($);
   const bom = parseBom($);
   const compatibleProducts = parseCompatibility($);
@@ -797,6 +1068,7 @@ export function parseSearch(html) {
   return {
     description: description || null,
     category: category || null,
+    availability: availability || null,
     imageUrl,
     bomItems: bom.items,
     compatibleProducts,

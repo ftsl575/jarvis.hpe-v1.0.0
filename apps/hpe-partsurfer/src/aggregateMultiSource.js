@@ -76,13 +76,14 @@ function hasPartSurferData(parsed) {
     description,
     category,
     imageUrl,
+    availability,
     bomItems,
     compatibleProducts,
     replacedBy,
     substitute
   } = parsed;
 
-  if (description || category || imageUrl || replacedBy || substitute) {
+  if (description || category || imageUrl || availability || replacedBy || substitute) {
     return true;
   }
 
@@ -102,7 +103,7 @@ function hasPhotoData(parsed) {
     return false;
   }
 
-  return Boolean(parsed.description || parsed.imageUrl);
+  return Boolean(parsed.title || parsed.imageUrl);
 }
 
 function hasBuyData(parsed) {

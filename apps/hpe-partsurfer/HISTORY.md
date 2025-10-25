@@ -7,6 +7,9 @@
   `CHECK MANUALLY` fallbacks).
 - Patch: photo title description, robust autocorrect, 804329-002 manual check, PartSurfer 'Part Description',
   Buy not-found.
+- Normalize parsers: prefer PartSurfer details table descriptions/categories with availability mapping,
+  add photo caption/alt fallbacks (and PS title backfill), strengthen Buy HPE title selectors
+  (including og/twitter meta) with empty-DOM `Product Not Found`, and unify provider success criteria.
 
 ## v1.0.0-stable — October 2025
 
