@@ -4,7 +4,7 @@ const aggregateModuleUrl = new URL('../aggregateMultiSource.js', import.meta.url
 const aggregateModulePath = aggregateModuleUrl.href;
 const fetchModuleUrl = new URL('../fetch.js', import.meta.url).href;
 const parseSearchModuleUrl = new URL('../parseSearch.js', import.meta.url).href;
-const parsePhotoModulePath = new URL('./parsePhoto.js', aggregateModuleUrl).pathname;
+const parsePhotoModuleUrl = new URL('../parsePhoto.js', import.meta.url).href;
 const fetchBuyModulePath = new URL('./fetchBuyHpe.js', aggregateModuleUrl).pathname;
 const parseBuyModulePath = new URL('./parseBuyHpe.js', aggregateModuleUrl).pathname;
 
@@ -37,7 +37,7 @@ describe('aggregateMultiSource', () => {
       parseSearch: jest.fn(() => searchData)
     }));
 
-    jest.unstable_mockModule(parsePhotoModulePath, () => ({
+    jest.unstable_mockModule(parsePhotoModuleUrl, () => ({
       parsePhoto: jest.fn(() => photoData)
     }));
 
@@ -78,7 +78,7 @@ describe('aggregateMultiSource', () => {
       }))
     }));
 
-    jest.unstable_mockModule(parsePhotoModulePath, () => ({
+    jest.unstable_mockModule(parsePhotoModuleUrl, () => ({
       parsePhoto: jest.fn(() => ({ description: null, imageUrl: null }))
     }));
 
