@@ -1,8 +1,13 @@
+import {
+  collapseWhitespace as baseCollapseWhitespace,
+  decodeHtmlEntities as baseDecodeHtmlEntities,
+  normalizeText as baseNormalizeText
+} from '../utils/normalizeText.js';
+
 const HPE_BASE_URL = 'https://partsurfer.hpe.com/';
 
 const TRACKING_PARAM_PATTERN = /^(utm_|cid$|cmpid$|gclid$|s_kwcid$|icid$)/i;
 const DASH_VARIANTS = /[\u2010-\u2015\u2212]/g;
-const NBSP_PATTERN = /\u00A0/g;
 const DESCRIPTION_PLACEHOLDER_PATTERNS = [
   { pattern: /^product description not available$/i, markUnavailable: true },
   { pattern: /^hpe\s+partsurfer(?:\s*(?:photo|image))?$/i, markUnavailable: false }
@@ -16,64 +21,15 @@ function isString(value) {
 }
 
 export function collapseWhitespace(value) {
-  if (!isString(value)) {
-    return '';
-  }
-
-  return value.replace(NBSP_PATTERN, ' ').replace(/\s+/g, ' ').trim();
-}
-
-const NAMED_ENTITIES = new Map([
-  ['amp', '&'],
-  ['lt', '<'],
-  ['gt', '>'],
-  ['quot', '"'],
-  ['apos', "'"]
-]);
-
-function decodeNumericEntity(value, base) {
-  const codePoint = Number.parseInt(value, base);
-  if (!Number.isFinite(codePoint)) {
-    return null;
-  }
-
-  try {
-    return String.fromCodePoint(codePoint);
-  } catch (error) {
-    return null;
-  }
+  return baseCollapseWhitespace(value);
 }
 
 export function decodeHtmlEntities(value) {
-  if (!isString(value) || value.length === 0) {
-    return '';
-  }
-
-  return value
-    .replace(/&#(\d+);/g, (_, digits) => {
-      const decoded = decodeNumericEntity(digits, 10);
-      return decoded ?? _;
-    })
-    .replace(/&#x([0-9a-f]+);/gi, (_, digits) => {
-      const decoded = decodeNumericEntity(digits, 16);
-      return decoded ?? _;
-    })
-    .replace(/&([a-z]+);/gi, (_, name) => {
-      const lowered = name.toLowerCase();
-      if (NAMED_ENTITIES.has(lowered)) {
-        return NAMED_ENTITIES.get(lowered);
-      }
-
-      return _;
-    });
+  return baseDecodeHtmlEntities(value);
 }
 
 export function normalizeText(value) {
-  if (!isString(value)) {
-    return '';
-  }
-
-  return collapseWhitespace(decodeHtmlEntities(value));
+  return baseNormalizeText(value);
 }
 
 export function normalizeDescription(value, state) {

@@ -1,6 +1,6 @@
 {
   "name": "hpe-partsurfer",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Utilities for parsing HPE PartSurfer part numbers.",
   "type": "module",
   "main": "src/index.js",

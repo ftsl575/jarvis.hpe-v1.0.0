@@ -171,7 +171,13 @@ function parseJsonLd($, baseUrl) {
           partNumber: partNumber || null,
           url: absolutize(coerceString(node.url), baseUrl),
           image: absolutize(coerceString(node.image), baseUrl),
-          category: coerceString(node.category) || coerceString(node.categoryName) || coerceString(offer?.category) || null
+          category: coerceString(node.category) || coerceString(node.categoryName) || coerceString(offer?.category) || null,
+          description:
+            coerceString(node.description)
+            || coerceString(node.baseProduct?.description)
+            || coerceString(node.longDescription)
+            || null,
+          lang: coerceString(node.inLanguage) || coerceString(node.language) || null
         };
       }
     } catch (error) {
@@ -342,6 +348,14 @@ export function parseBuyHpe(html, options = {}) {
   }
   const image = structured?.image || extractImage($, baseUrl) || null;
   const category = structured?.category || textFromMeta($, 'product:category') || textFromMeta($, 'og:category') || findFirstBreadcrumb($) || null;
+  const rawDescription = structured?.description
+    || textFromMeta($, 'description')
+    || textFromMeta($, 'og:description')
+    || textFromMeta($, 'twitter:description')
+    || null;
+  const description = normalizeText(rawDescription) || null;
+  const langCandidate = normalizeText(structured?.lang || $('html').attr('lang') || '') || null;
+  const lang = langCandidate ? langCandidate.toLowerCase() : null;
 
   return {
     title,
@@ -349,7 +363,9 @@ export function parseBuyHpe(html, options = {}) {
     partNumber,
     url,
     image,
-    category
+    category,
+    description,
+    lang
   };
 }
 
