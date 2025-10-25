@@ -16,7 +16,7 @@ describe('parsePhoto', () => {
     const result = parsePhoto(html);
 
     expect(result).toEqual({
-      description: 'Optional Rack Rail Kit for ProLiant servers.',
+      title: 'Optional Rack Rail Kit for ProLiant servers.',
       imageUrl: 'https://partsurfer.hpe.com/media/photos/af573a_large.jpg'
     });
   });
@@ -26,7 +26,7 @@ describe('parsePhoto', () => {
     const result = parsePhoto(html);
 
     expect(result).toEqual({
-      description: 'Optional Rack Rail Kit for ProLiant servers.',
+      title: 'Optional Rack Rail Kit for ProLiant servers.',
       imageUrl: null
     });
   });
@@ -36,8 +36,18 @@ describe('parsePhoto', () => {
     const result = parsePhoto(html);
 
     expect(result).toEqual({
-      description: null,
+      title: null,
       imageUrl: null
+    });
+  });
+
+  test('uses caption or alt text when head title is generic', () => {
+    const html = loadFixture('photo_caption.html');
+    const result = parsePhoto(html);
+
+    expect(result).toEqual({
+      title: 'High-speed cooling fan module',
+      imageUrl: 'https://partsurfer.hpe.com/media/photos/fan123_large.jpg'
     });
   });
 });

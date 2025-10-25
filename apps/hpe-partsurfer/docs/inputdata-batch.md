@@ -52,3 +52,23 @@ Successful lookups keep the fetched provider data but annotate the exported `Par
 `"<original> (auto change <alternate>)"` so reviewers can see the substituted SKU. Parts in the
 denylist (currently `804329-002`) skip auto-correction entirely and are emitted with
 `CHECK MANUALLY` markers plus `BUY_URL` set to `Product Not Found`.
+
+## Parser notes
+
+- **PartSurfer Search.aspx** now prefers the details table row whose label is exactly `Part Description`;
+  this value is used for `PS_Title`. Category extraction first looks for `Product Category`/`Category`
+  in the same table, then falls back to breadcrumb text immediately before the part number while
+  filtering out `Keyword` noise. Availability strings are normalised from labels such as `Availability`,
+  `Orderable`, `Status`, and `Lifecycle` to consistent values like `Available`, `Not Orderable`,
+  `Obsolete`, `End of Life`, or `Replaced (<PN>)`.
+- **PartSurfer ShowPhoto.aspx** pulls the most meaningful text in the order `<title>` → nearby caption
+  headings (`h1`, `h2`, `.caption`, etc.) → `<img alt>`. When the search page is missing a title but the
+  photo page has one, the CLI backfills `PS_Title` using the photo caption. Photo misses explicitly set
+  `PSPhoto_Error` to `not found`.
+- **Buy HPE PDP** looks for titles in dynamic DOM nodes such as `h1.product-detail__name`,
+  `[data-testid="pdp_productTitle"]`, `meta[property="og:title"]`, and
+  `meta[name="twitter:title"]`. HTTP 200 responses that still fail to produce a title are treated as
+  misses, yielding `BUY_URL = "Product Not Found"` and `BUY_Error = "not found"` even when the page
+  returns an empty shell.
+- Provider success is now strictly `title && url`; when every provider fails the CLI emits
+  `CHECK MANUALLY` markers (after applying the denylist/auto-correct flow described above).

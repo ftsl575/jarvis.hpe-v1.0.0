@@ -106,6 +106,8 @@ describe('processPart integration', () => {
     expect(row.PartNumber).toBe('780428-002 (auto change 780428-001)');
     expect(row.PS_Title).toBe('System Board Assembly');
     expect(row.PSPhoto_Title).toBe('Cooling Fan Photo');
+    expect(row.BUY_URL).toBe('Product Not Found');
+    expect(row.BUY_Title).toBe('');
     expect(getSearchHtmlMock).toHaveBeenCalledWith('780428-001', expect.any(Object));
     expect(getPhotoHtmlMock).toHaveBeenCalledWith('780428-001', expect.any(Object));
   });
@@ -144,5 +146,59 @@ describe('processPart integration', () => {
     expect(row.BUY_Error).toBe('not found');
     expect(row.PS_Title).toBe('System Board Assembly');
     expect(row.PSPhoto_Title).toBe('Cooling Fan Photo');
+  });
+
+  test('falls back to photo title when search description is empty', async () => {
+    const module = await importModuleWithMocks();
+    const { processPart } = module;
+
+    getSearchHtmlMock.mockResolvedValue('<html><body><div class="ps-part-summary__title"></div></body></html>');
+    getPhotoHtmlMock.mockResolvedValue(
+      '<!doctype html><html><head><title>Hot Swap Fan</title></head><body><img src="https://cdn.example.com/fallback.jpg" /></body></html>'
+    );
+    providerBuyHpeMock.mockResolvedValue(null);
+
+    const row = await processPart('867982-B21', {});
+
+    expect(row.PS_Title).toBe('Hot Swap Fan');
+    expect(row.PSPhoto_Title).toBe('Hot Swap Fan');
+    expect(row.BUY_URL).toBe('Product Not Found');
+  });
+
+  test('buy.hpe not-found SKUs produce Product Not Found URLs with empty titles', async () => {
+    const module = await importModuleWithMocks();
+    const { processPart } = module;
+
+    const successSearchHtml =
+      '<!doctype html><html><body><table><tr><th>Part Description</th><td>Standard Power Supply</td></tr></table></body></html>';
+    getSearchHtmlMock.mockResolvedValue(successSearchHtml);
+    getPhotoHtmlMock.mockResolvedValue('<html><body>Photo is not available</body></html>');
+    providerBuyHpeMock.mockResolvedValue(null);
+
+    const skus = [
+      'P19766-B21',
+      'P24487-B21',
+      '867982-B21',
+      '875545-001',
+      '804326-B21',
+      '873580-001',
+      '780428-002',
+      '743454-001',
+      '804329-002'
+    ];
+
+    const rows = [];
+    for (const sku of skus) {
+      rows.push(await processPart(sku, {}));
+    }
+
+    for (const row of rows) {
+      expect(row.BUY_URL).toBe('Product Not Found');
+      expect(row.BUY_Title).toBe('');
+    }
+
+    const denylisted = rows.find((row) => row.PartNumber.startsWith('804329-002'));
+    expect(denylisted.BUY_Error).toBe('CHECK MANUALLY');
+    expect(denylisted.PartNumber).toContain('CHECK MANUALLY');
   });
 });

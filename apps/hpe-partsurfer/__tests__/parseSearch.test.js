@@ -18,6 +18,7 @@ describe('parseSearch', () => {
     expect(result).toEqual({
       description: 'HPE ProLiant OKN Fan Module',
       category: 'Cooling Modules',
+      availability: null,
       imageUrl: 'https://partsurfer.hpe.com/media/photos/okn1234a_large.jpg',
       bomItems: [
         { partNumber: 'OKN2001', description: 'Primary Fan Cartridge' },
@@ -40,6 +41,7 @@ describe('parseSearch', () => {
     expect(result).toEqual({
       description: null,
       category: null,
+      availability: null,
       imageUrl: null,
       bomItems: [],
       compatibleProducts: [],
@@ -59,6 +61,7 @@ describe('parseSearch', () => {
     expect(result).toEqual({
       description: 'Legacy Power Supply Unit',
       category: 'Power Supplies',
+      availability: null,
       imageUrl: 'https://partsurfer.hpe.com/images/parts/legacy_supply.png',
       bomItems: [],
       compatibleProducts: [],
@@ -78,6 +81,7 @@ describe('parseSearch', () => {
     expect(result).toEqual({
       description: 'Rack Mounting Kit',
       category: 'Rack Accessories',
+      availability: null,
       imageUrl: null,
       bomItems: [],
       compatibleProducts: [
@@ -86,6 +90,26 @@ describe('parseSearch', () => {
         { partNumber: 'ML350-G10', description: 'ProLiant ML350 Gen10 Server' }
       ],
       replacedBy: null,
+      substitute: null,
+      multipleResults: false,
+      notFound: false,
+      bomSectionFound: false,
+      bomUnavailable: false
+    });
+  });
+
+  test('prefers details table values for description, category, and availability', () => {
+    const html = loadFixture('search_details_table.html');
+    const result = parseSearch(html);
+
+    expect(result).toEqual({
+      description: 'System Board Assembly',
+      category: 'Server Components',
+      availability: 'Replaced (P12345-002)',
+      imageUrl: null,
+      bomItems: [],
+      compatibleProducts: [],
+      replacedBy: 'P12345-002',
       substitute: null,
       multipleResults: false,
       notFound: false,

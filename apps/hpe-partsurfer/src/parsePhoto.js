@@ -1,24 +1,30 @@
 import { load } from 'cheerio';
 import { absolutizeUrl, collapseWhitespace, normalizeText } from './normalize.js';
 
-const DESCRIPTION_SELECTORS = [
-  '#ctl00_mainContent_lblShortDescription',
-  '#ctl00_BodyContentPlaceHolder_lblShortDescription',
-  '#ctl00_BodyContentPlaceHolder_lblDescription',
-  '.ps-photo-description',
-  '.ps-photo-details__description',
-  '.ps-part-summary__title',
-  '.photo-description',
-  '.photo-card__description',
-  '.ps-photo-caption',
-  'h1',
-  'h2.short-description',
-  'meta[property="og:description"]',
-  'meta[name="description"]'
-];
-
 const CAPTION_SELECTORS = ['figcaption', '.ps-photo-caption', '.photo-caption', '.caption'];
 const CAPTION_SELECTOR_STRING = CAPTION_SELECTORS.join(',');
+
+const NEARBY_TITLE_SELECTORS = [
+  'h1',
+  'h2',
+  'h3',
+  '.ps-photo-caption',
+  '.photo-caption',
+  '.caption',
+  '.ps-photo-description',
+  '.ps-photo-details__description',
+  '.photo-description',
+  '.photo-card__description',
+  'p'
+];
+
+const NEARBY_SELECTOR_STRING = NEARBY_TITLE_SELECTORS.join(',');
+
+const GENERIC_TITLE_PATTERNS = [
+  /^hpe\s+partsurfer(?:\s*(?:[-–—]\s*)?(?:photo|image))?$/i,
+  /^partsurfer(?:\s+photo)?$/i,
+  /^photo\s*(?:viewer|details)?$/i
+];
 
 const IMAGE_SELECTORS = [
   '#ctl00_mainContent_imgPhoto',
@@ -66,18 +72,21 @@ function extractText($, element) {
   return normalizeText(element.text());
 }
 
-function findFirstText($, selectors) {
-  for (const selector of selectors) {
-    const element = $(selector).first();
-    if (element && element.length > 0) {
-      const text = extractText($, element);
-      if (text) {
-        return text;
-      }
-    }
+function sanitizeTitle(value) {
+  const text = normalizeText(value);
+  if (!text) {
+    return null;
   }
 
-  return null;
+  if (GENERIC_TITLE_PATTERNS.some((pattern) => pattern.test(text))) {
+    return null;
+  }
+
+  if (text.length < 3) {
+    return null;
+  }
+
+  return text;
 }
 
 function extractImage($) {
@@ -122,7 +131,7 @@ function extractCaption($, imageElement) {
   const figure = imageElement.closest('figure');
   if (figure && figure.length > 0) {
     const caption = figure.find(CAPTION_SELECTOR_STRING).first();
-    const text = extractText($, caption);
+    const text = sanitizeTitle(extractText($, caption));
     if (text) {
       return text;
     }
@@ -130,26 +139,9 @@ function extractCaption($, imageElement) {
 
   const parentCaption = imageElement.parent().find(CAPTION_SELECTOR_STRING).first();
   if (parentCaption && parentCaption.length > 0) {
-    const text = extractText($, parentCaption);
+    const text = sanitizeTitle(extractText($, parentCaption));
     if (text) {
       return text;
-    }
-  }
-
-  return null;
-}
-
-function findFallbackDescription($) {
-  const labeled = $('body')
-    .find('p, span, div, strong')
-    .filter((_, el) => /^description\s*:/i.test(normalizeText($(el).text())))
-    .first();
-
-  if (labeled && labeled.length > 0) {
-    const text = normalizeText(labeled.text());
-    const match = text.match(/^description\s*:\s*(.+)$/i);
-    if (match && match[1]) {
-      return match[1].trim();
     }
   }
 
@@ -161,27 +153,87 @@ function isNotFound($) {
   return NO_PHOTO_PATTERNS.some((pattern) => pattern.test(bodyText));
 }
 
+function extractNearbyTitle($, imageElement) {
+  if (!imageElement || imageElement.length === 0) {
+    return null;
+  }
+
+  const containers = [
+    imageElement.closest('figure'),
+    imageElement.closest('.ps-photo, .ps-photo-details, .ps-photo-container, .photo-card, .photo-wrapper, .photo-section'),
+    imageElement.parent()
+  ];
+
+  for (const container of containers) {
+    if (!container || container.length === 0) {
+      continue;
+    }
+
+    let result = null;
+    container.find(NEARBY_SELECTOR_STRING).each((_, element) => {
+      const text = sanitizeTitle(extractText($, $(element)));
+      if (text) {
+        result = text;
+        return false;
+      }
+      return undefined;
+    });
+
+    if (result) {
+      return result;
+    }
+  }
+
+  return null;
+}
+
+function extractAltText(imageElement) {
+  if (!imageElement || imageElement.length === 0) {
+    return null;
+  }
+
+  const alt = imageElement.attr('alt');
+  if (typeof alt !== 'string') {
+    return null;
+  }
+
+  return sanitizeTitle(alt);
+}
+
 export function parsePhoto(html) {
   if (!html) {
-    return { description: null, imageUrl: null };
+    return { title: null, imageUrl: null };
   }
 
   const $ = load(html);
 
   if (isNotFound($)) {
-    return { description: null, imageUrl: null };
+    return { title: null, imageUrl: null };
   }
 
-  const headTitle = normalizeText($('head > title').first().text()) || null;
-  const directDescription = findFirstText($, DESCRIPTION_SELECTORS);
+  const headTitle = sanitizeTitle($('head > title').first().text()) || null;
   const image = extractImage($);
   const caption = image.element ? extractCaption($, image.element) : null;
-  const fallbackDescription = findFallbackDescription($);
+  const nearbyTitle = image.element ? extractNearbyTitle($, image.element) : null;
+  let globalTitle = null;
 
-  const description = headTitle || directDescription || caption || fallbackDescription || null;
+  if (!caption && !nearbyTitle) {
+    const elements = $(NEARBY_SELECTOR_STRING).toArray();
+    for (const element of elements) {
+      const text = sanitizeTitle(extractText($, $(element)));
+      if (text) {
+        globalTitle = text;
+        break;
+      }
+    }
+  }
+
+  const altText = extractAltText(image.element || $('img').first());
+
+  const title = headTitle || caption || nearbyTitle || globalTitle || altText || null;
 
   return {
-    description,
+    title,
     imageUrl: image.url
   };
 }

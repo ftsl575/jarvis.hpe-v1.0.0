@@ -17,7 +17,7 @@ describe('parsePhoto ShowPhoto.aspx handling', () => {
 
     const result = parsePhoto(html);
 
-    expect(result.description).toBe('Cooling Fan Assembly');
+    expect(result.title).toBe('Cooling Fan Assembly');
     expect(result.imageUrl).toBe('https://images.example.com/fan.jpg');
   });
 
@@ -34,7 +34,7 @@ describe('parsePhoto ShowPhoto.aspx handling', () => {
 
     const result = parsePhoto(html);
 
-    expect(result.description).toBe('Array Controller Caption');
+    expect(result.title).toBe('Array Controller Caption');
     expect(result.imageUrl).toBe('https://images.example.com/controller.jpg');
   });
 });

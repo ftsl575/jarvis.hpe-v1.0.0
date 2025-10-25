@@ -37,4 +37,20 @@ describe('parseBuyHpe', () => {
       category: 'Networking > Access Points > Wi-Fi 6E'
     });
   });
+
+  it.each([
+    ['p00930-b21.html', 'HPE ProLiant DL380 Gen10 Server', 'https://buy.hpe.com/us/en/p/P00930-B21'],
+    ['p18422-b21.html', 'HPE ProLiant DL325 Gen10 Plus Server', 'https://buy.hpe.com/us/en/p/P18422-B21'],
+    ['455883-b21.html', 'HPE 800W Flex Slot Platinum Hot Plug Power Supply Kit', 'https://buy.hpe.com/us/en/p/455883-B21'],
+    ['874543-b21.html', 'HPE Smart Storage Battery', 'https://buy.hpe.com/us/en/p/874543-B21']
+  ])('extracts product title from %s selectors', async (fixture, expectedTitle, expectedUrl) => {
+    const fileUrl = new URL(`../fixtures/buyhpe/${fixture}`, import.meta.url);
+    const html = await readFile(fileUrl, 'utf8');
+    const result = parseBuyHpe(html, { url: fileUrl.href });
+
+    expect(result).toMatchObject({
+      title: expectedTitle,
+      url: expectedUrl
+    });
+  });
 });

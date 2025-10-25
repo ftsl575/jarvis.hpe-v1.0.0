@@ -73,8 +73,8 @@ export async function runForPart(partNumber, options = {}) {
   } else {
     const photoResult = await fetchPhotoInfo(normalized, fetchOptions);
 
-    if (photoResult.description) {
-      result.description = photoResult.description;
+    if (photoResult.title) {
+      result.description = photoResult.title;
       result.image_url = photoResult.imageUrl ?? null;
       result.source_page = 'Photo';
     } else {
@@ -108,8 +108,8 @@ export async function runForPart(partNumber, options = {}) {
   if (mode === 'Search' && allowPhotoFallback && (!result.description || !result.image_url)) {
     log.debug('Falling back to photo lookup', { partNumber: normalized });
     const photoResult = await fetchPhotoInfo(normalized, fetchOptions);
-    if (!result.description && photoResult.description) {
-      result.description = photoResult.description;
+    if (!result.description && photoResult.title) {
+      result.description = photoResult.title;
       result.source_page = 'Photo';
     }
     if (!result.image_url && photoResult.imageUrl) {

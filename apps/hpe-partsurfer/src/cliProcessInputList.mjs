@@ -201,10 +201,11 @@ async function fetchPartSurfer(partNumber, options, row) {
     }
     row.PS_Title = parsed.description ? parsed.description.trim() : '';
     row.PS_Category = parsed.category ?? '';
-    row.PS_Image = parsed.imageUrl ?? '';
-    if (Array.isArray(parsed.bomItems) && parsed.bomItems.length > 0) {
+    row.PS_Availability = parsed.availability ?? '';
+    if (!row.PS_Availability && Array.isArray(parsed.bomItems) && parsed.bomItems.length > 0) {
       row.PS_Availability = `BOM items: ${parsed.bomItems.length}`;
     }
+    row.PS_Image = parsed.imageUrl ?? '';
   } catch (error) {
     row.PS_Error = error?.code || error?.status || error?.message || 'error';
   }
@@ -215,17 +216,17 @@ async function fetchPartSurferPhoto(partNumber, options, row) {
   row.PSPhoto_URL = `${DEFAULT_PHOTO_BASE}${encodeQuery(partNumber)}`;
   try {
     const html = await getPhotoHtml(partNumber, options);
-    const { description, imageUrl } = parsePhoto(html);
-    const title = description ? description : '';
-    const image = imageUrl ? imageUrl : '';
-    const hasTitle = title.length > 0;
-    const hasImage = image.length > 0;
-    if (!hasTitle && !hasImage) {
+    const { title, imageUrl } = parsePhoto(html);
+    const normalizedTitle = title ? title.trim() : '';
+    if (!normalizedTitle) {
+      row.PSPhoto_Title = '';
+      row.PSPhoto_Image = '';
       row.PSPhoto_Error = 'not found';
       return;
     }
-    row.PSPhoto_Title = hasTitle ? title : '';
-    row.PSPhoto_Image = hasImage ? image : '';
+
+    row.PSPhoto_Title = normalizedTitle;
+    row.PSPhoto_Image = imageUrl ? imageUrl : '';
   } catch (error) {
     if (error?.status === 404 || error?.status === 410 || error?.status === 403) {
       row.PSPhoto_Error = 'not found';
@@ -281,6 +282,9 @@ async function buildRowForPart(partNumber, providerOptions) {
 
   await fetchPartSurfer(partNumber, providerOptions, row);
   await fetchPartSurferPhoto(partNumber, providerOptions, row);
+  if ((!row.PS_Title || !row.PS_Title.trim()) && row.PSPhoto_Title && row.PSPhoto_Title.trim()) {
+    row.PS_Title = row.PSPhoto_Title.trim();
+  }
   await fetchBuyHpe(partNumber, providerOptions, row);
 
   finaliseProviderStates(row);

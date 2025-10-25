@@ -207,6 +207,36 @@ function extractAvailability($) {
   return null;
 }
 
+function extractTitle($) {
+  const productHeading = normalizeWhitespace($('h1.product-detail__name').first().text());
+  if (productHeading) {
+    return productHeading;
+  }
+
+  const testIdHeading = normalizeWhitespace($('[data-testid="pdp_productTitle"]').first().text());
+  if (testIdHeading) {
+    return testIdHeading;
+  }
+
+  const ogTitle = textFromMeta($, 'og:title');
+  if (ogTitle) {
+    return ogTitle;
+  }
+
+  const twitterTitle = textFromMeta($, 'twitter:title');
+  if (twitterTitle) {
+    return twitterTitle;
+  }
+
+  const genericHeading = normalizeWhitespace($('h1').first().text());
+  if (genericHeading) {
+    return genericHeading;
+  }
+
+  const documentTitle = normalizeWhitespace($('title').first().text());
+  return documentTitle || null;
+}
+
 function extractImage($, baseUrl) {
   const inlineSelectors = [
     'img[data-product-image]',
@@ -310,7 +340,7 @@ function extractIdentifier($) {
 }
 
 function parseFallback($, baseUrl) {
-  const title = textFromMeta($, 'og:title') || normalizeWhitespace($('h1').first().text()) || normalizeWhitespace($('title').first().text());
+  const title = extractTitle($);
   const image = extractImage($, baseUrl);
   const canonical = $('link[rel="canonical"]').attr('href') || textFromMeta($, 'og:url');
   const price = extractPrice($);
@@ -319,7 +349,7 @@ function parseFallback($, baseUrl) {
   const identifier = extractIdentifier($);
   const category = textFromMeta($, 'product:category') || textFromMeta($, 'og:category') || findFirstBreadcrumb($);
 
-  if (!title && !price && !identifier) {
+  if (!title) {
     return null;
   }
 
