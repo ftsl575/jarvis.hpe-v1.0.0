@@ -1,2 +1,3 @@
-partNumber,hpe.partsurfer,hpe.partsurfer.photo,hpe.buyhpe
-PN0000,NO DATA AT THIS SOURCE,NO DATA AT THIS SOURCE,NO DATA AT THIS SOURCE
+partNumber,title,sku,price,priceCurrency,availability,url,image,source
+Q1J09B,HPE ProLiant DL380 Gen10 Server,Q1J09B,12345.67,USD,InStock,https://buy.hpe.com/us/en/p/Q1J09B,https://assets.ext.hpe.com/is/image/hpedam/proliant-dl380?wid=1200&hei=630,HPE Buy
+R7K89A,"HPE Aruba Networking 630 Series Campus Access Point",R7K89A,1599.00,USD,InStock,https://buy.hpe.com/us/en/p/R7K89A,https://buy.hpe.com/content/dam/hpe/aruba-630.png,HPE Buy
