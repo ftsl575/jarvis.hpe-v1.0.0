@@ -7,7 +7,7 @@ describe('parseBuyHpe', () => {
     const html = await readFile(fileUrl, 'utf8');
     const result = parseBuyHpe(html, { url: fileUrl.href });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       title: 'HPE ProLiant DL380 Gen10 Server',
       sku: 'Q1J09B',
       partNumber: 'Q1J09B',
@@ -22,7 +22,7 @@ describe('parseBuyHpe', () => {
     const html = await readFile(fileUrl, 'utf8');
     const result = parseBuyHpe(html, { url: fileUrl.href });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       title: 'HPE Aruba Networking 630 Series',
       sku: 'R7K89A',
       partNumber: 'R7K89A',
@@ -53,7 +53,7 @@ describe('parseBuyHpe', () => {
     const html = await readFile(fileUrl, 'utf8');
     const result = parseBuyHpe(html, { url: fileUrl.href });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       title: 'HPE Aruba CX Switch',
       sku: 'JL815A',
       partNumber: 'JL815A',

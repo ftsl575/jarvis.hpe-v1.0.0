@@ -3,17 +3,25 @@
 ## Overview
 
 The Buy HPE integration fetches product detail pages, extracts descriptive metadata (title, SKU,
-canonical URL, image, category), and reports whether the page contained enough information to be
-considered a success. Requests honour the shared timeout/retry budget and rotate between a
-small pool of desktop/tablet `User-Agent` values while sending `Accept-Language: en-US,en;q=0.9`.
+canonical URL, image, category, marketing description, language), and reports whether the page
+contained enough information to be considered a success. After DOM/JSON-LD parsing the HTML
+snippet is passed through dual ChatGPT/DeepSeek filters that verify the extracted copy against the
+source markup, emit evidence offsets, and raise manual-check flags when the models disagree.
+Requests honour the shared timeout/retry budget, rotate across more than twenty realistic desktop
+and mobile `User-Agent` values, pace each attempt with a random 2–4 s delay, and send
+`Accept-Language: en-US,en;q=0.9` with per-attempt cookie jars.
 
 ## Fetch behaviour
 
 - Base URL defaults to `https://buy.hpe.com/` but can be overridden with the `baseUrl` option.
 - Requests are limited to `GET` for public product and search pages.
-- Two retries are attempted for transient failures (`429` or `5xx` responses) with exponential backoff.
-- Each retry uses the next `User-Agent` from the configured pool to reduce the chance of repeated
-  blocks.
+- Two retries are attempted for transient failures (`429` or `5xx` responses) with exponential backoff
+  plus jitter; every attempt is preceded by a random 2–4 s pacing delay to respect rate limits.
+- Each retry pulls the next `User-Agent` from a shuffled pool of desktop/tablet/mobile signatures
+  (20+ entries). Status `403`/`429` responses reshuffle the pool and clear cookies before continuing.
+- Cookies set by the origin are isolated per request sequence; blocked attempts start with a fresh jar.
+- Network logs now include `attempt`, `uaId`, and `method` metadata so throttling behaviour can be
+  analysed offline.
 - A timeout can be adjusted through `timeoutMs` (default: 12 seconds).
 
 ## Parser strategy
@@ -58,6 +66,22 @@ the row as `fetchedFrom: "search-card"`. If no card exists the original status c
 CLI can emit `CHECK MANUALLY`. Successful results always include `source: "HPE Buy (buy.hpe.com)"`
 and an additional `fetchedFrom` field indicating whether the direct, search, or search-card path
 produced the payload.
+
+## Intelligent verification filter
+
+- Each fetched HTML document is sanitised (scripts/styles stripped, trimmed to 20 kB) and supplied to
+  parallel ChatGPT and DeepSeek validators. Both models receive the same prompt describing the target
+  SKU, any DOM-derived candidates, and the snippet.
+- Models must return JSON with `title`, `marketing_description`, `sku`, `lang`, `evidenceSnippet`,
+  `charStart`, `charEnd`, and `confidence`. Responses are normalised (Unicode NFKC, whitespace
+  collapse, boilerplate removal) via `utils/normalizeText.js`.
+- Agreement on title/description/SKU elevates confidence and yields a `marketingDescription`
+  attached to the provider payload. Evidence snippets and byte offsets are stored under
+  `llmEvidence` for downstream auditing.
+- Disagreements or unverifiable SKUs trigger `manualCheck: true`. If both models return empty strings
+  the description is cleared without forcing a manual review.
+- Verification metadata (`confidence`, `agreement`, provider/model identifiers, prompt hash) is logged
+  to support QA audits without persisting raw HTML in logs.
 
 ## Aggregator integration
 

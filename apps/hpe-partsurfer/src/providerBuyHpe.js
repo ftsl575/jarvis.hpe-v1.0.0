@@ -2,6 +2,7 @@ import { load } from 'cheerio';
 import fetchBuyHpe from './fetchBuyHpe.js';
 import parseBuyHpe, { sanitizeBuyTitle } from './parseBuyHpe.js';
 import { normalizePartNumber, normalizeText } from './normalize.js';
+import applyIntelligentExtraction from './intelligentExtraction.js';
 
 const DEFAULT_BASE_URL = 'https://buy.hpe.com/';
 const DEFAULT_LOCALE = 'us/en';
@@ -359,7 +360,46 @@ async function fetchProduct(urlOrPath, fetchOptions, sku) {
     if (!parsed) {
       return null;
     }
-    return { ...parsed, source: 'HPE Buy (buy.hpe.com)' };
+    let llmResult = null;
+    try {
+      llmResult = await applyIntelligentExtraction(html, {
+        sku,
+        title: parsed.title,
+        description: parsed.description,
+        url: response.url
+      });
+    } catch (error) {
+      llmResult = null;
+    }
+
+    const augmented = {
+      ...parsed,
+      source: 'HPE Buy (buy.hpe.com)'
+    };
+
+    if (llmResult && llmResult.enabled) {
+      if (llmResult.marketingDescription !== undefined) {
+        augmented.marketingDescription = llmResult.marketingDescription;
+      }
+      if (llmResult.verifiedTitle) {
+        const normalizedTitle = normalizeText(llmResult.verifiedTitle);
+        if (normalizedTitle) {
+          augmented.title = normalizedTitle;
+        }
+      }
+      augmented.manualCheck = llmResult.manualCheck ?? false;
+      augmented.confidence = llmResult.confidence ?? null;
+      augmented.llmEvidence = {
+        snippet: llmResult.evidenceSnippet ?? '',
+        charStart: llmResult.charStart ?? null,
+        charEnd: llmResult.charEnd ?? null,
+        promptHash: llmResult.promptHash ?? null,
+        providers: llmResult.providers ?? null,
+        agreement: llmResult.agreement ?? null
+      };
+    }
+
+    return augmented;
   } catch (error) {
     if (isNotFoundStatus(error?.status)) {
       return null;

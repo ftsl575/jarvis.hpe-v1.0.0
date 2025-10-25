@@ -1,5 +1,20 @@
 ## [Unreleased]
 
+### Intelligent extraction upgrade
+- **LLM verification**: introduce ChatGPT and DeepSeek backed filters that validate Buy HPE titles,
+  marketing copy, and SKUs directly against sanitised HTML snippets. Matching responses reinforce
+  existing DOM/JSON-LD parsing, surface evidence locations, and raise `manualCheck` only when the
+  models disagree or lack verifiable data.
+- **Text normalisation**: centralise Unicode/HTML cleanup in `utils/normalizeText.js`, apply NFKC
+  folding, strip boilerplate phrases (“Buy HPE…”, “PartSurfer…”, “Service Parts Information…”),
+  enforce 1024-character limits, and reuse the helper across PartSurfer and Buy flows.
+- **Buy HPE resilience**: expand the User-Agent pool to 20+ realistic desktop/mobile signatures,
+  add paced retries (random 2–4s delay plus jittered backoff), refresh cookie jars on 403/429, and
+  log per-attempt `uaId`/`method` metadata for downstream throttling analysis.
+- **Structured payloads**: capture Buy HPE descriptions, language hints, and LLM verification
+  metadata (`marketingDescription`, `confidence`, evidence bounds) while preserving the legacy
+  schema for aggregators and CSV exports.
+
 ### Final parser QA
 - **Safe upgrade**: share text normalisation utilities (including NBSP cleanup and placeholder filtering),
   prioritise PartSurfer table descriptions, backfill PS titles when search returns the SKU, and add

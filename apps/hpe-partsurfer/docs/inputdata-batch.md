@@ -73,18 +73,32 @@ denylist (currently `804329-002`) skip auto-correction entirely and are emitted 
   Generic `<title>` values like `HPE PartSurfer` are ignored. The same placeholder message triggers a
   manual check, and when only the photo exposes a meaningful title the CLI backfills `PS_Title` from
   `PSPhoto_Title`.
+- **Normalization helper** now lives in `utils/normalizeText.js` and performs Unicode NFKC folding,
+  HTML/whitespace cleanup, boilerplate filtering (“Buy HPE…”, “PartSurfer…”, “Service Parts Information…”),
+  and 1024-character truncation. All providers reuse the helper for consistent text comparisons.
 - **Buy HPE PDP** walks a selector cascade of `h1.pdp-product-name`, `h1.product-detail__name`,
   `.product-detail__summary h1`, `.product__title`, `[data-testid="pdp_productTitle"]`, then metadata
   (`meta[property="og:title"]`, `meta[name="twitter:title"]`). JSON-LD fallbacks read
   `productName`, `baseProduct.productName`, `name`, or `headline`, and URLs/images/categories are
-  absolutised against the canonical link. Empty DOM responses short-circuit to `BUY_URL = "Product Not
-  Found"` so Buy success still requires a title **and** canonical URL.
+  absolutised against the canonical link. Descriptions and language codes are captured from JSON-LD or
+  meta tags, normalised with the shared helper, and handed to the LLM verifier. Empty DOM responses
+  short-circuit to `BUY_URL = "Product Not Found"` so Buy success still requires a title **and**
+  canonical URL.
+- **Buy HPE verification** feeds a sanitised HTML snippet plus the DOM-derived candidates into
+  ChatGPT and DeepSeek. Matching responses attach a `marketingDescription`, confidence score,
+  evidence snippet, and provider metadata to the provider payload. Disagreements or unverifiable SKUs
+  flip `manualCheck` to `true` so reviewers can prioritise the row.
 - Provider success is now strictly `title && url`; placeholder matches, denylisted parts, and all-provider
   misses emit the existing `CHECK MANUALLY` markers after applying the auto-correct flow described above.
 
 ## Networking, retries, and logging
 
 - SKU normalisation uppercases input, collapses stray whitespace/dashes, expands known truncated suffixes (e.g. `B2` → `B21`), and restores hyphenated forms such as `P00930-B21`.
-- All outbound requests force HTTPS, strip tracking parameters, rotate through a small pool of `User-Agent` strings, and send `Accept-Language: en-US,en;q=0.9`. ShowPhoto and Buy HPE calls share the same timeout budget and retry up to the configured limit with exponential backoff (default 3 attempts).
+- All outbound requests force HTTPS, strip tracking parameters, rotate through a shuffled pool of more
+  than twenty `User-Agent` strings, and send `Accept-Language: en-US,en;q=0.9`. Buy HPE calls insert a
+  random 2–4 s pacing delay before each attempt, reuse origin cookies within the attempt, and flush the
+  jar when `403`/`429` responses arrive. ShowPhoto and Buy HPE share the same timeout budget and retry
+  up to the configured limit with jittered exponential backoff (default 3 attempts). JSON logs now
+  capture `attempt`, `uaId`, and `method` fields alongside the previous network metrics.
 - `--concurrency <n>` limits simultaneous lookups (default 3), `--retry <count>` overrides the retry budget, and `--log-json <file>` writes structured JSONL records to `apps\hpe-partsurfer\logs\*.jsonl` with `ts, sku, provider, url, http, bytes, durationMs, retries, parseHint, success` fields.
 - CSV exports are emitted as UTF-8 with BOM; all values are trimmed and any embedded semicolons/newlines are escaped so spreadsheets remain aligned.
