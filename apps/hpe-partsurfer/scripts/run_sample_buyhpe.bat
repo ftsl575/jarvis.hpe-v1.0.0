@@ -6,11 +6,8 @@ if "%~1"=="" (
   exit /b 1
 )
 
-set "SKU=%~1"
-set "ROOT=%~dp0.."
-pushd "%ROOT%"
+cd /d "C:\Users\G\Desktop\jarvis.hpe v1.0.0\apps\hpe-partsurfer" || exit /b 1
 
-node --input-type=module -e "const sku = process.argv[1]; import('../src/providerBuyHpe.js').then(async (mod) => { const result = await mod.providerBuyHpe(sku, { live: true }); console.log(JSON.stringify(result, null, 2)); }).catch((error) => { console.error(error); process.exit(1); });" "%SKU%"
+node --experimental-vm-modules .\src\runSampleBuyHpe.mjs "%~1"
 
-popd
 endlocal

@@ -45,14 +45,16 @@ or search fallback succeeded.
  `apps/hpe-partsurfer/sample_results_semicolon.csv`. Values are normalised and quoted when necessary,
  with a static `source` column populated as `HPE Buy (buy.hpe.com)`.
 
-## Local sampling
+## Sample runner
 
-Use `scripts\run_sample_buyhpe.bat` to download a single SKU. Example:
+Use `scripts\run_sample_buyhpe.bat` to download a single SKU through the ESM runner in
+`src\runSampleBuyHpe.mjs`. Example:
 
 ```bat
-cd "C:\Users\G\Desktop\jarvis.hpe v1.0.0"
 cd "C:\Users\G\Desktop\jarvis.hpe v1.0.0\apps\hpe-partsurfer"
 .\scripts\run_sample_buyhpe.bat Q1J09B
 ```
 
-The batch file runs the provider with live mode enabled and prints the parsed JSON payload.
+The batch file changes into the application directory, calls
+`node --experimental-vm-modules .\src\runSampleBuyHpe.mjs`, and prints the provider response as
+formatted JSON. Live mode is enabled automatically so no additional flags are required.
