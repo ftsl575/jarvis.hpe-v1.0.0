@@ -46,3 +46,9 @@ product cannot be located the CSV now records `BUY_URL` as `Product Not Found`.
 For providers that return no data or throw errors, the corresponding `*_Error` column contains a short
 status such as `not found`, `CHECK MANUALLY`, or an error code while the other provider-specific
 columns remain empty.
+
+When every provider misses on a `-002` spare, the CLI automatically retries with the `-001` suffix.
+Successful lookups keep the fetched provider data but annotate the exported `PartNumber` with
+`"<original> (auto change <alternate>)"` so reviewers can see the substituted SKU. Parts in the
+denylist (currently `804329-002`) skip auto-correction entirely and are emitted with
+`CHECK MANUALLY` markers plus `BUY_URL` set to `Product Not Found`.

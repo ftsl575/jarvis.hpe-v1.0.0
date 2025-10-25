@@ -85,13 +85,29 @@ function buildFetchOptions(options, baseUrl) {
   return fetchOptions;
 }
 
+function isNotFoundStatus(status) {
+  return status === 403 || status === 404 || status === 410;
+}
+
 async function fetchProduct(urlOrPath, fetchOptions, sku) {
-  const response = await fetchBuyHpe(urlOrPath, fetchOptions);
-  const parsed = parseBuyHpe(response.html, { url: response.url, sku });
-  if (!parsed) {
-    return null;
+  try {
+    const response = await fetchBuyHpe(urlOrPath, fetchOptions);
+    const html = typeof response.html === 'string' ? response.html : '';
+    if (!html.trim()) {
+      return null;
+    }
+
+    const parsed = parseBuyHpe(html, { url: response.url, sku });
+    if (!parsed) {
+      return null;
+    }
+    return { ...parsed, source: 'HPE Buy (buy.hpe.com)' };
+  } catch (error) {
+    if (isNotFoundStatus(error?.status)) {
+      return null;
+    }
+    throw error;
   }
-  return { ...parsed, source: 'HPE Buy (buy.hpe.com)' };
 }
 
 export async function providerBuyHpe(sku, options = {}) {
@@ -107,14 +123,29 @@ export async function providerBuyHpe(sku, options = {}) {
       return { ...product, fetchedFrom: 'product' };
     }
   } catch (error) {
-    if (!error || (error.status && error.status !== 404 && error.status !== 410)) {
+    if (!error || (error.status && !isNotFoundStatus(error.status))) {
       throw error;
     }
   }
 
   const searchPath = `${locale}/search?q=${encodeURIComponent(normalizedSku)}`;
-  const searchResponse = await fetchBuyHpe(searchPath, fetchOptions);
-  const productUrl = extractFirstProductUrl(searchResponse.html, searchResponse.url || baseUrl);
+  let searchResponse;
+
+  try {
+    searchResponse = await fetchBuyHpe(searchPath, fetchOptions);
+  } catch (error) {
+    if (isNotFoundStatus(error?.status)) {
+      return null;
+    }
+    throw error;
+  }
+
+  const searchHtml = typeof searchResponse.html === 'string' ? searchResponse.html : '';
+  if (!searchHtml.trim()) {
+    return null;
+  }
+
+  const productUrl = extractFirstProductUrl(searchHtml, searchResponse.url || baseUrl);
   if (!productUrl) {
     return null;
   }
