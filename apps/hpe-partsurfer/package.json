@@ -35,6 +35,7 @@
     "setupFiles": [
       "<rootDir>/jest.setup.js"
     ],
+    "resolver": "<rootDir>/jest.resolver.cjs",
     "testMatch": [
       "**/__tests__/**/*.?(m)[tj]s?(x)",
       "**/?(*.)+(spec|test).?(m)[tj]s?(x)"

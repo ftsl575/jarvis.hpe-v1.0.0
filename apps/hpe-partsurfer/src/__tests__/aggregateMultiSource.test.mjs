@@ -2,7 +2,7 @@ import { jest } from '@jest/globals';
 
 const aggregateModuleUrl = new URL('../aggregateMultiSource.js', import.meta.url);
 const aggregateModulePath = aggregateModuleUrl.href;
-const fetchModulePath = new URL('./fetch.js', aggregateModuleUrl).pathname;
+const fetchModuleUrl = new URL('../fetch.js', import.meta.url).href;
 const parseSearchModulePath = new URL('./parseSearch.js', aggregateModuleUrl).pathname;
 const parsePhotoModulePath = new URL('./parsePhoto.js', aggregateModuleUrl).pathname;
 const fetchBuyModulePath = new URL('./fetchBuyHpe.js', aggregateModuleUrl).pathname;
@@ -28,7 +28,7 @@ describe('aggregateMultiSource', () => {
       imageUrl: 'https://example.test/photo.png'
     };
 
-    jest.unstable_mockModule(fetchModulePath, () => ({
+    await jest.unstable_mockModule(fetchModuleUrl, () => ({
       getSearchHtml: jest.fn(async () => '<html>search</html>'),
       getPhotoHtml: jest.fn(async () => '<html>photo</html>')
     }));
@@ -61,7 +61,7 @@ describe('aggregateMultiSource', () => {
       availability: 'in_stock'
     };
 
-    jest.unstable_mockModule(fetchModulePath, () => ({
+    await jest.unstable_mockModule(fetchModuleUrl, () => ({
       getSearchHtml: jest.fn(async () => '<html>search</html>'),
       getPhotoHtml: jest.fn(async () => '<html>photo</html>')
     }));
