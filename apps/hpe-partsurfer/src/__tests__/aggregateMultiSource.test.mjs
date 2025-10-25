@@ -3,7 +3,7 @@ import { jest } from '@jest/globals';
 const aggregateModuleUrl = new URL('../aggregateMultiSource.js', import.meta.url);
 const aggregateModulePath = aggregateModuleUrl.href;
 const fetchModuleUrl = new URL('../fetch.js', import.meta.url).href;
-const parseSearchModulePath = new URL('./parseSearch.js', aggregateModuleUrl).pathname;
+const parseSearchModuleUrl = new URL('../parseSearch.js', import.meta.url).href;
 const parsePhotoModulePath = new URL('./parsePhoto.js', aggregateModuleUrl).pathname;
 const fetchBuyModulePath = new URL('./fetchBuyHpe.js', aggregateModuleUrl).pathname;
 const parseBuyModulePath = new URL('./parseBuyHpe.js', aggregateModuleUrl).pathname;
@@ -33,7 +33,7 @@ describe('aggregateMultiSource', () => {
       getPhotoHtml: jest.fn(async () => '<html>photo</html>')
     }));
 
-    jest.unstable_mockModule(parseSearchModulePath, () => ({
+    jest.unstable_mockModule(parseSearchModuleUrl, () => ({
       parseSearch: jest.fn(() => searchData)
     }));
 
@@ -66,7 +66,7 @@ describe('aggregateMultiSource', () => {
       getPhotoHtml: jest.fn(async () => '<html>photo</html>')
     }));
 
-    jest.unstable_mockModule(parseSearchModulePath, () => ({
+    jest.unstable_mockModule(parseSearchModuleUrl, () => ({
       parseSearch: jest.fn(() => ({
         description: null,
         category: null,
