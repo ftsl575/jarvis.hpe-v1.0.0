@@ -1,4 +1,5 @@
 name: CI
+
 on:
   - pull_request
 
@@ -8,6 +9,7 @@ jobs:
     defaults:
       run:
         working-directory: apps/hpe-partsurfer
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -19,7 +21,7 @@ jobs:
       - name: Install dependencies
         run: npm ci || npm install
 
-      # пропускаем для PR, где head-ветка release/*
+      # Пропускаем CI для веток release/*
       - name: Skip CI on release branches
         if: ${{ startsWith(github.event.pull_request.head.ref, 'release/') }}
         run: echo "Skipping lint/test/sample on release branches"
