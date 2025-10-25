@@ -1,4 +1,4 @@
-﻿const { buildCompatibilityMap } = require("../../src/compatibility/compatibility");
+﻿import { buildCompatibilityMap } from "../../src/compatibility/compatibility.js";
 
 test("buildCompatibilityMap normalizes and maps correctly", () => {
   const parts = [
