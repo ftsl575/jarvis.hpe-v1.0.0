@@ -4,7 +4,6 @@ on:
   - pull_request
 
 jobs:
-  # Полный CI для обычных PR
   node:
     if: ${{ !startsWith(github.event.pull_request.head.ref, 'release/') }}
     runs-on: ubuntu-latest
@@ -18,19 +17,14 @@ jobs:
           node-version: 20
           cache: npm
           cache-dependency-path: apps/hpe-partsurfer/package-lock.json
-
       - name: Install dependencies
         run: npm ci || npm install
-
       - name: Lint
         run: npm run lint
-
       - name: Test
         run: npm test
-
       - name: Run sample
         run: npm run sample
-
       - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@v4
@@ -38,7 +32,6 @@ jobs:
           name: coverage
           path: apps/hpe-partsurfer/coverage
 
-  # Нулевой job для PR из release/*
   release_ok:
     if: ${{ startsWith(github.event.pull_request.head.ref, 'release/') }}
     runs-on: ubuntu-latest
