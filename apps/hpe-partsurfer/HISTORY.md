@@ -1,6 +1,10 @@
 ## [Unreleased]
 
 ### Final parser QA
+- **Safe upgrade**: share text normalisation utilities (including NBSP cleanup and placeholder filtering),
+  prioritise PartSurfer table descriptions, backfill PS titles when search returns the SKU, and add
+  buy.hpe.com resilience (User-Agent rotation, search-card fallback on 403/503, manual-check signalling).
+  Verified via refreshed unit and integration suites.
 - **PS/Search**: prefer the details table row labelled `Part Description` for the title, normalise category
   and availability values from both tables and field pairs, and trigger manual checks when the content is the
   `PRODUCT DESCRIPTION NOT AVAILABLE` placeholder.

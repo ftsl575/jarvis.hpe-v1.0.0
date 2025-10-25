@@ -1,7 +1,5 @@
 import { load } from 'cheerio';
-import { absolutizeUrl, collapseWhitespace, normalizeText } from './normalize.js';
-
-const NO_DESCRIPTION_PATTERN = /^product description not available$/i;
+import { absolutizeUrl, collapseWhitespace, normalizeDescription, normalizeText } from './normalize.js';
 
 const DESCRIPTION_SELECTORS = [
   '#ctl00_BodyContentPlaceHolder_lblPartDescription',
@@ -217,18 +215,6 @@ function extractSiblingValue($, labelElement) {
   return null;
 }
 
-function sanitizeDescription(value, state) {
-  const text = normalizeText(value);
-  if (!text || NO_DESCRIPTION_PATTERN.test(text)) {
-    if (state && text) {
-      state.descriptionUnavailable = true;
-    }
-    return '';
-  }
-
-  return text;
-}
-
 function normalizeDetailLabel(value) {
   const text = normalizeText(value);
   if (!text) {
@@ -259,6 +245,9 @@ function buildDetailsMap($) {
       }
 
       const valueCells = cells.slice(1).toArray();
+      if (valueCells.length === 0 || valueCells.every((cell) => $(cell).is('th'))) {
+        continue;
+      }
       const parts = valueCells
         .map((cell) => normalizeText($(cell).text()))
         .filter((text) => Boolean(text));
@@ -299,6 +288,13 @@ function findDescriptionFromTable($) {
     const id = table.attr('id') ?? '';
     const className = table.attr('class') ?? '';
     if (/(\bbom\b|bill\s*of\s*material)/i.test(`${id} ${className}`)) {
+      continue;
+    }
+
+    if (
+      table.hasClass('compatibility-table')
+      || table.closest('.ps-compatibility, .compatibility-table, .compatibility-list').length > 0
+    ) {
       continue;
     }
 
@@ -451,33 +447,44 @@ function findDescriptionFromPairs($) {
   return null;
 }
 
+function isPurePartNumber(value) {
+  if (!value) {
+    return false;
+  }
+
+  const normalized = value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+  const match = normalized.match(PART_NUMBER_PATTERN);
+  return Boolean(match && match[0] === normalized);
+}
+
+function isMeaningfulDescription(value) {
+  return Boolean(value && !isPurePartNumber(value));
+}
+
 function findDescription($, detailsMap, state) {
-  const canonical = sanitizeDescription(getDetailValue(detailsMap, 'Part Description'), state);
-  if (canonical) {
+  const canonical = normalizeDescription(getDetailValue(detailsMap, 'Part Description'), state);
+  if (isMeaningfulDescription(canonical)) {
     return canonical;
   }
 
-  const detailsTable = sanitizeDescription(findDescriptionFromDetailsTable($), state);
-  if (detailsTable) {
+  const detailsTable = normalizeDescription(findDescriptionFromDetailsTable($), state);
+  if (isMeaningfulDescription(detailsTable)) {
     return detailsTable;
   }
 
-  const direct = findFirstText($, DESCRIPTION_SELECTORS);
-  const sanitizedDirect = sanitizeDescription(direct, state);
-  if (sanitizedDirect) {
-    return sanitizedDirect;
+  const fromTable = normalizeDescription(findDescriptionFromTable($), state);
+  if (isMeaningfulDescription(fromTable)) {
+    return fromTable;
   }
 
-  const fromPairs = findDescriptionFromPairs($);
-  const sanitizedPairs = sanitizeDescription(fromPairs, state);
-  if (sanitizedPairs) {
-    return sanitizedPairs;
+  const fromPairs = normalizeDescription(findDescriptionFromPairs($), state);
+  if (isMeaningfulDescription(fromPairs)) {
+    return fromPairs;
   }
 
-  const fromTable = findDescriptionFromTable($);
-  const sanitizedTable = sanitizeDescription(fromTable, state);
-  if (sanitizedTable) {
-    return sanitizedTable;
+  const direct = normalizeDescription(findFirstText($, DESCRIPTION_SELECTORS), state);
+  if (isMeaningfulDescription(direct)) {
+    return direct;
   }
 
   const fallbackElement = $('body')
@@ -489,8 +496,8 @@ function findDescription($, detailsMap, state) {
     const text = normalizeText(fallbackElement.text());
     const match = text.match(/^description\s*:\s*(.+)$/i);
     if (match && match[1]) {
-      const candidate = sanitizeDescription(match[1], state);
-      if (candidate) {
+      const candidate = normalizeDescription(match[1], state);
+      if (isMeaningfulDescription(candidate)) {
         return candidate;
       }
     }

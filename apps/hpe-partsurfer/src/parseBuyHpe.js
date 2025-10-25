@@ -1,12 +1,11 @@
 import { load } from 'cheerio';
-import { normalizeWhitespace } from './html.js';
-import { normalizeUrl } from './normalize.js';
+import { normalizeText, normalizeUrl } from './normalize.js';
 
 const SCHEMA_PRODUCT = 'product';
 const SCHEMA_OFFER = 'offer';
 const DEFAULT_BASE_URL = 'https://buy.hpe.com/';
 
-const TITLE_SELECTORS = [
+const DOM_TITLE_SELECTORS = [
   'h1.pdp-product-name',
   'h1.product-detail__name',
   '.product-detail__summary h1',
@@ -17,6 +16,12 @@ const TITLE_SELECTORS = [
 const META_TITLE_SELECTORS = [
   ['meta[property="og:title"]', 'content'],
   ['meta[name="twitter:title"]', 'content']
+];
+
+const GENERIC_TITLE_PATTERNS = [
+  /^buy\s+hpe/i,
+  /^hewlett\s+packard\s+enterprise$/i,
+  /^hpe\s*(?:home|united\s+states)/i
 ];
 
 const SKU_ATTRIBUTE_SELECTORS = [
@@ -152,13 +157,14 @@ function parseJsonLd($, baseUrl) {
         const offer = pickOffer(node.offers ?? node.offer);
         const sku = coerceString(node.sku) || pickProductIdentifier(node);
         const partNumber = pickProductIdentifier(node) || sku;
-        const title =
+        const rawTitle =
           coerceString(node.productName)
           || coerceString(node.baseProduct?.productName)
           || coerceString(node.name)
           || coerceString(node.headline)
           || coerceString(node.title)
           || null;
+        const title = sanitizeTitle(rawTitle);
         return {
           title,
           sku: sku || null,
@@ -175,15 +181,28 @@ function parseJsonLd($, baseUrl) {
   return null;
 }
 
+function sanitizeTitle(value) {
+  const text = normalizeText(value);
+  if (!text) {
+    return null;
+  }
+
+  if (GENERIC_TITLE_PATTERNS.some((pattern) => pattern.test(text))) {
+    return null;
+  }
+
+  return text;
+}
+
 function textFromMeta($, name) {
   const meta = $(`meta[name="${name}"]`).attr('content') || $(`meta[property="${name}"]`).attr('content');
-  return meta ? normalizeWhitespace(meta) : null;
+  return meta ? normalizeText(meta) : null;
 }
 
 function findFirstBreadcrumb($) {
   const items = [];
   $('[aria-label="Breadcrumb"], nav.breadcrumb, ol.breadcrumb, ul.breadcrumb').first().find('a, span').each((_, el) => {
-    const value = normalizeWhitespace($(el).text());
+    const value = normalizeText($(el).text());
     if (value) {
       items.push(value);
     }
@@ -191,19 +210,23 @@ function findFirstBreadcrumb($) {
   return items.length > 0 ? items.join(' > ') : null;
 }
 
-function findTitle($) {
-  for (const selector of TITLE_SELECTORS) {
-    const text = normalizeWhitespace($(selector).first().text());
-    if (text) {
-      return text;
+function findDomTitle($) {
+  for (const selector of DOM_TITLE_SELECTORS) {
+    const candidate = sanitizeTitle($(selector).first().text());
+    if (candidate) {
+      return candidate;
     }
   }
+  return null;
+}
+
+function findMetaTitle($) {
   for (const [selector, attribute] of META_TITLE_SELECTORS) {
     const value = $(selector).attr(attribute);
     if (typeof value === 'string' && value.trim()) {
-      const text = normalizeWhitespace(value);
-      if (text) {
-        return text;
+      const candidate = sanitizeTitle(value);
+      if (candidate) {
+        return candidate;
       }
     }
   }
@@ -217,12 +240,12 @@ function extractSkuFromDom($) {
       continue;
     }
     const value = attr === 'content' ? element.attr(attr) : element.attr(attr) ?? element.text();
-    const normalized = normalizeWhitespace(value ?? '');
+    const normalized = normalizeText(value ?? '');
     if (normalized) {
       return normalized;
     }
   }
-  const inlineSku = normalizeWhitespace($('[itemprop="sku"]').first().text());
+  const inlineSku = normalizeText($('[itemprop="sku"]').first().text());
   if (inlineSku) {
     return inlineSku;
   }
@@ -302,7 +325,10 @@ export function parseBuyHpe(html, options = {}) {
   const baseUrl = resolveBaseUrl(options);
   const $ = load(html);
   const structured = parseJsonLd($, baseUrl) || null;
-  const title = findTitle($) || structured?.title || null;
+  const domTitle = findDomTitle($);
+  const metaTitle = domTitle ? null : findMetaTitle($);
+  const structuredTitle = domTitle || metaTitle ? null : sanitizeTitle(structured?.title);
+  const title = domTitle || metaTitle || structuredTitle || null;
   if (!title) {
     return null;
   }
@@ -327,4 +353,5 @@ export function parseBuyHpe(html, options = {}) {
   };
 }
 
+export { sanitizeTitle as sanitizeBuyTitle };
 export default parseBuyHpe;

@@ -136,7 +136,7 @@ describe('processPart integration', () => {
     expect(providerBuyHpeMock).not.toHaveBeenCalled();
   });
 
-  test('buy.hpe 4xx sets Product Not Found', async () => {
+  test('buy.hpe 4xx records CHECK MANUALLY', async () => {
     const successSearchHtml = `<!doctype html><html><body><table><tr><th>Part Description</th><td>System Board Assembly</td></tr></table></body></html>`;
     const successPhotoHtml = `<!doctype html><html><head><title>Cooling Fan Photo</title></head><body><img src="https://cdn.example.com/fan.jpg" /></body></html>`;
 
@@ -152,7 +152,7 @@ describe('processPart integration', () => {
     const row = await processPart('875545-001', {});
 
     expect(row.BUY_URL).toBe('Product Not Found');
-    expect(row.BUY_Error).toBe('not found');
+    expect(row.BUY_Error).toBe('CHECK MANUALLY');
     expect(row.PS_Title).toBe('System Board Assembly');
     expect(row.PSPhoto_Title).toBe('Cooling Fan Photo');
   });
@@ -172,6 +172,42 @@ describe('processPart integration', () => {
     expect(row.PS_Title).toBe('Hot Swap Fan');
     expect(row.PSPhoto_Title).toBe('Hot Swap Fan');
     expect(row.BUY_URL).toBe('Product Not Found');
+  });
+
+  test('replaces PS title with photo title when it matches the SKU', async () => {
+    const module = await importModuleWithMocks();
+    const { processPart } = module;
+
+    getSearchHtmlMock.mockResolvedValue(
+      '<html><body><div class="ps-part-summary__title">875545-001</div></body></html>'
+    );
+    getPhotoHtmlMock.mockResolvedValue(
+      '<!doctype html><html><head><title>System I/O Board Assembly</title></head><body><img src="https://cdn.example.com/system.jpg" alt="System I/O Board Assembly" /></body></html>'
+    );
+    providerBuyHpeMock.mockResolvedValue(null);
+
+    const row = await processPart('875545-001', {});
+
+    expect(row.PS_Title).toBe('System I/O Board Assembly');
+    expect(row.PSPhoto_Title).toBe('System I/O Board Assembly');
+  });
+
+  test('marks BUY provider as manual when blocked by 403', async () => {
+    const module = await importModuleWithMocks();
+    const { processPart } = module;
+
+    const successSearchHtml =
+      '<!doctype html><html><body><table><tr><th>Part Description</th><td>Standard Power Supply</td></tr></table></body></html>';
+    getSearchHtmlMock.mockResolvedValue(successSearchHtml);
+    getPhotoHtmlMock.mockResolvedValue('<html><body><p>Power Supply</p></body></html>');
+    const forbidden = new Error('Forbidden');
+    forbidden.status = 403;
+    providerBuyHpeMock.mockRejectedValue(forbidden);
+
+    const row = await processPart('P19766-B21', {});
+
+    expect(row.BUY_URL).toBe('Product Not Found');
+    expect(row.BUY_Error).toBe('CHECK MANUALLY');
   });
 
   test('buy.hpe not-found SKUs produce Product Not Found URLs with empty titles', async () => {

@@ -4,14 +4,16 @@
 
 The Buy HPE integration fetches product detail pages, extracts descriptive metadata (title, SKU,
 canonical URL, image, category), and reports whether the page contained enough information to be
-considered a success. Requests honour the shared timeout/retry budget and reuse the global
-`User-Agent`/`Accept-Language` headers.
+considered a success. Requests honour the shared timeout/retry budget and rotate between a
+small pool of desktop/tablet `User-Agent` values while sending `Accept-Language: en-US,en;q=0.9`.
 
 ## Fetch behaviour
 
 - Base URL defaults to `https://buy.hpe.com/` but can be overridden with the `baseUrl` option.
 - Requests are limited to `GET` for public product and search pages.
 - Two retries are attempted for transient failures (`429` or `5xx` responses) with exponential backoff.
+- Each retry uses the next `User-Agent` from the configured pool to reduce the chance of repeated
+  blocks.
 - A timeout can be adjusted through `timeoutMs` (default: 12 seconds).
 
 ## Parser strategy
@@ -21,7 +23,7 @@ considered a success. Requests honour the shared timeout/retry budget and reuse 
    `title`. The parser still extracts SKU/partNumber identifiers, canonical URLs, images, and category
    strings while ignoring price/availability fields to keep the export schema stable.
 2. Fallback to DOM heuristics when schema data is missing. The fallback walks a selector cascade in
-   the following order and returns the first non-empty value:
+   the following order and returns the first non-empty, non-generic value:
    - `h1.pdp-product-name`
    - `h1.product-detail__name`
    - `.product-detail__summary h1`
@@ -29,10 +31,12 @@ considered a success. Requests honour the shared timeout/retry budget and reuse 
    - `[data-testid="pdp_productTitle"]`
    - `meta[property="og:title"]`
    - `meta[name="twitter:title"]`
-   Canonical URLs are resolved from `<link rel="canonical">` or `og:url`, normalised, and required for
-   success so the provider only returns payloads with both `title` and `url`. If every selector fails on
-   a live page—or the DOM is effectively empty—the parser returns `null` and the provider records
-   `BUY_URL = "Product Not Found"` with `BUY_Error = "not found"`.
+   - JSON-LD `title`/`name` fields as a last resort
+   Titles that mirror “Buy HPE...” boilerplate or the SKU itself are ignored so search/photo fallbacks
+   can supply better copy. Canonical URLs are resolved from `<link rel="canonical">` or `og:url`,
+   normalised, and required for success so the provider only returns payloads with both `title` and `url`.
+   If every selector fails on a live page—or the DOM is effectively empty—the parser returns `null` and
+   the provider records `BUY_URL = "Product Not Found"` with `BUY_Error = "not found"`.
 
 ### Examples
 
@@ -47,9 +51,13 @@ considered a success. Requests honour the shared timeout/retry budget and reuse 
 
 The provider first requests `/[locale]/p/<SKU>` (default locale is `us/en`). If the product page
 cannot be parsed (including empty-DOM responses) or returns a `404`, the provider fetches
-`/[locale]/search?q=<SKU>` and pulls the first product card link before re-running the parser.
-Successful results include `source: "HPE Buy (buy.hpe.com)"` and an additional `fetchedFrom` field
-indicating whether the direct or search fallback succeeded.
+`/[locale]/search?q=<SKU>` and pulls the first product card link before re-running the parser. When
+the PDP responds with `403`, `429`, or `503`, the search page is used as a data source directly: the
+first matching product card provides the title/URL (and image when available) and the provider marks
+the row as `fetchedFrom: "search-card"`. If no card exists the original status code is rethrown so the
+CLI can emit `CHECK MANUALLY`. Successful results always include `source: "HPE Buy (buy.hpe.com)"`
+and an additional `fetchedFrom` field indicating whether the direct, search, or search-card path
+produced the payload.
 
 ## Aggregator integration
 

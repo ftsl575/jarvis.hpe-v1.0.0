@@ -144,6 +144,27 @@ describe('parseSearch', () => {
     });
   });
 
+  test('prefers part description table rows over meta tags', () => {
+    const html = loadFixture('search_875545_001.html');
+    const result = parseSearch(html);
+
+    expect(result).toEqual({
+      description: 'System I/O Board Assembly',
+      category: null,
+      availability: null,
+      imageUrl: null,
+      bomItems: [],
+      compatibleProducts: [],
+      replacedBy: null,
+      substitute: null,
+      multipleResults: false,
+      notFound: false,
+      bomSectionFound: false,
+      bomUnavailable: false,
+      manualCheck: false
+    });
+  });
+
   test('marks manual check when description is unavailable placeholder', () => {
     const html = loadFixture('search_description_unavailable.html');
     const result = parseSearch(html);
