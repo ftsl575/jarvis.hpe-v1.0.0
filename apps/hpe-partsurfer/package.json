@@ -34,6 +34,10 @@
     "testEnvironment": "node",
     "setupFiles": [
       "<rootDir>/jest.setup.js"
+    ],
+    "testMatch": [
+      "**/__tests__/**/*.?(m)[tj]s?(x)",
+      "**/?(*.)+(spec|test).?(m)[tj]s?(x)"
     ]
   }
 }
