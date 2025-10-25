@@ -37,6 +37,10 @@ or search fallback succeeded.
   classification stays aligned with the supported source taxonomy.
 - Part numbers are normalised once prior to executing the provider chain to keep duplicate SKUs
   from triggering redundant requests.
+- When both the direct product lookup and the fallback search miss, the batch export records
+  `BUY_URL` as `Product Not Found` and surfaces `BUY_Error = not found` so manual follow-up is obvious.
+- The companion batch helper also captures the `<title>` element from `ShowPhoto.aspx` to populate
+  `PSPhoto_Title` while retaining the `PSPhoto_URL` even when an image cannot be fetched.
 
 ## CSV export helper
 

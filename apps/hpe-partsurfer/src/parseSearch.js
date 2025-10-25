@@ -137,11 +137,12 @@ function stripCategoryLabel(value) {
 
   const normalized = normalizeText(value);
   const match = normalized.match(/category\s*(?:[:\-]|is)?\s*(.+)/i);
-  if (match && match[1]) {
-    return match[1].trim();
+  const candidate = match && match[1] ? match[1].trim() : normalized;
+  const keywordTrimmed = candidate.replace(/^keywords?\s*(?:[:\-]|is)?\s*/i, '').trim();
+  if (!keywordTrimmed && /keywords?/i.test(candidate)) {
+    return '';
   }
-
-  return normalized;
+  return keywordTrimmed || candidate;
 }
 
 function extractText($, element) {

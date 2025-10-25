@@ -34,8 +34,15 @@ prefix:
 Both files include the following header (semicolon layout is Excel-friendly for Russian locales):
 
 ```
-PartNumber;PS_Title;PS_SKU;PS_Category;PS_Availability;PS_URL;PS_Image;PS_Error;PSPhoto_Title;PSPhoto_SKU;PSPhoto_URL;PSPhoto_Image;PSPhoto_Error;BUY_Title;BUY_SKU;BUY_Price;BUY_Currency;BUY_Availability;BUY_URL;BUY_Image;BUY_Error
+#;PartNumber;PS_Title;PSPhoto_Title;BUY_Title;PS_SKU;PS_Category;PS_Availability;PS_URL;PS_Image;PS_Error;PSPhoto_SKU;PSPhoto_URL;PSPhoto_Image;PSPhoto_Error;BUY_SKU;BUY_URL;BUY_Image;BUY_Error
 ```
 
+The first column `#` increments each processed part (starting from 1) so the Excel sheet retains the
+original ordering. Provider specific titles are grouped up front (`PartNumber`, `PS_Title`,
+`PSPhoto_Title`, and `BUY_Title`) to match the revised review flow, while the remaining technical
+fields keep their previous order. Pricing columns were removed from the Buy HPE export; when the
+product cannot be located the CSV now records `BUY_URL` as `Product Not Found`.
+
 For providers that return no data or throw errors, the corresponding `*_Error` column contains a short
-status such as `not found` or an error code while the other provider-specific columns remain empty.
+status such as `not found`, `CHECK MANUALLY`, or an error code while the other provider-specific
+columns remain empty.
