@@ -1,1 +1,47 @@
+name: CI
+
+on:
+  - pull_request
+
+jobs:
+  node:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/hpe-partsurfer
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/hpe-partsurfer/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      # Пропускаем CI для веток release/*
+      - name: Skip CI on release branches
+        if: ${{ startsWith(github.event.pull_request.head.ref, 'release/') }}
+        run: echo "Skipping lint/test/sample on release branches"
+
+      - name: Lint
+        if: ${{ !startsWith(github.event.pull_request.head.ref, 'release/') }}
+        run: npm run lint
+
+      - name: Test
+        if: ${{ !startsWith(github.event.pull_request.head.ref, 'release/') }}
+        run: npm test
+
+      - name: Run sample
+        if: ${{ !startsWith(github.event.pull_request.head.ref, 'release/') }}
+        run: npm run sample
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: apps/hpe-partsurfer/coverage
 
