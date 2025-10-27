@@ -1,0 +1,64 @@
+name: Pre-PR Binary Check
+
+on:
+  push:
+    branches: [ "main", "develop", "feature/**", "release/**" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+
+jobs:
+  check-binaries:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine diff range
+        id: range
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "base=${{ github.event.pull_request.base.sha }}" >> $GITHUB_OUTPUT
+            echo "head=${{ github.event.pull_request.head.sha }}" >> $GITHUB_OUTPUT
+          else
+            echo "base=${{ github.event.before }}" >> $GITHUB_OUTPUT
+            echo "head=${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: List changed files
+        id: changed
+        run: |
+          BASE="${{ steps.range.outputs.base }}"
+          HEAD="${{ steps.range.outputs.head }}"
+          git diff --name-only --diff-filter=ACMRT "$BASE" "$HEAD" > changed.txt
+          echo "Changed files:"
+          cat changed.txt || true
+
+      - name: Fail on binary or large files
+        run: |
+          BIN_REGEX='\.(pdf|png|jpg|jpeg|gif|bmp|svgz|webp|ico|docx|pptx|xlsx|sqlite|db|zip|gz|bz2|7z|bin|exe|dmg|mp4|mov|mp3|wav)$'
+          LARGE_LIMIT=$((5 * 1024 * 1024)) # 5 MB
+
+          BIN_LIST=$(grep -Ei "$BIN_REGEX" changed.txt || true)
+          LARGE_LIST=""
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            if [ -f "$f" ]; then
+              SZ=$(stat -c%s "$f" 2>/dev/null || echo 0)
+              if [ "$SZ" -ge "$LARGE_LIMIT" ]; then
+                LARGE_LIST="${LARGE_LIST}\n${f} (${SZ} bytes)"
+              fi
+            fi
+          done < changed.txt
+
+          if [ -n "$BIN_LIST" ] || [ -n "$LARGE_LIST" ]; then
+            echo "::group::Detected disallowed files"
+            [ -n "$BIN_LIST" ] && echo -e "Binary-like files:\n$BIN_LIST"
+            [ -n "$LARGE_LIST" ] && echo -e "Too large files (>=5MB):\n$LARGE_LIST"
+            echo "::endgroup::"
+            echo "::error::Binary or oversized files detected in changes. Remove from commit or add to .gitignore."
+            exit 1
+          fi
+
+      - name: Success
+        run: echo "No disallowed files detected."
