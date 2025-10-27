@@ -1,0 +1,74 @@
+name: Auto Sanitize Binaries
+
+on:
+  push:
+    branches: [ "feature/**", "release/**" ]  # не трогаем main/develop
+
+permissions:
+  contents: write  # нужно для авто-коммита
+
+jobs:
+  sanitize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine diff range
+        id: range
+        run: |
+          echo "base=${{ github.event.before }}" >> $GITHUB_OUTPUT
+          echo "head=${{ github.sha }}" >> $GITHUB_OUTPUT
+
+      - name: Detect disallowed files
+        id: detect
+        run: |
+          BASE="${{ steps.range.outputs.base }}"
+          HEAD="${{ steps.range.outputs.head }}"
+          git diff --name-only --diff-filter=ACMRT "$BASE" "$HEAD" > changed.txt
+
+          BIN_REGEX='\.(pdf|png|jpg|jpeg|gif|bmp|svgz|webp|ico|docx|pptx|xlsx|sqlite|db|zip|gz|bz2|7z|bin|exe|dmg|mp4|mov|mp3|wav)$'
+          BIN_LIST=$(grep -Ei "$BIN_REGEX" changed.txt || true)
+          echo "bin_list<<EOF" >> $GITHUB_OUTPUT
+          echo "$BIN_LIST" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          if [ -n "$BIN_LIST" ]; then
+            echo "Found binaries:"
+            echo "$BIN_LIST"
+          else
+            echo "No binaries found."
+          fi
+
+      - name: Stop if nothing to sanitize
+        if: ${{ steps.detect.outputs.bin_list == '' }}
+        run: echo "Clean. Nothing to do."
+
+      - name: Remove binaries from index and add ignore rules
+        if: ${{ steps.detect.outputs.bin_list != '' }}
+        run: |
+          set -e
+          echo "Preparing .gitignore updates"
+          touch .gitignore
+          # базовые паттерны; не дублируем если уже есть
+          for p in '*.pdf' '*.docx' '*.sqlite' '*.png' '*.jpg' '*.zip' '*.bin' '*.mp4' '*.mov'; do
+            grep -qxF "$p" .gitignore || echo "$p" >> .gitignore
+          done
+
+          echo "Unstaging binaries"
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            if [ -f "$f" ]; then
+              git rm --cached "$f"
+              echo "Removed from repo index: $f"
+            fi
+          done <<< "${{ steps.detect.outputs.bin_list }}"
+
+      - name: Commit and push cleanup
+        if: ${{ steps.detect.outputs.bin_list != '' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .gitignore
+          git commit -m "chore(ci): auto-remove binary files from commit and update .gitignore"
+          git push
