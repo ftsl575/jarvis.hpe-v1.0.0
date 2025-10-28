@@ -1,0 +1,24 @@
+name: API Nightly Health
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+jobs:
+  nightly:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+      - run: npm ci
+      - run: npm run provider:smoke -- chatgpt
+      - run: npm run provider:smoke -- deepseek
+      - run: node scripts/api-unified-check.js
+      - name: Save health log
+        run: |
+          echo "nightly ok $(date -u +%FT%TZ)" > nightly.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nightly-health-log
+          path: nightly.log
