@@ -9,7 +9,9 @@
     "lint": "eslint .",
     "test": "jest --runInBand",
     "db:migrate": "node scripts/migrate.js",
-    "api:check": "node scripts/api-unified-check.js"
+    "api:check": "node scripts/api-unified-check.js",
+    "dq:report": "node scripts/dq-report.js",
+    "bench:parse": "node scripts/bench-parse.js"
   },
   "engines": {
     "node": ">=18"
