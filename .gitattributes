@@ -25,3 +25,8 @@
 *.mov binary
 *.mp3 binary
 *.wav binary
+*.tar binary
+*.tar.gz binary
+*.tgz binary
+*.iso binary
+*.icns binary

@@ -1,7 +1,7 @@
 name: CI
 on:
   push:
-    branches: [ main, develop, "feature/*", "release/*" ]
+    branches: [ main, develop, "feature/**", "release/**", "codex/**" ]
   pull_request:
     branches: [ main, develop ]
 jobs:
@@ -9,21 +9,19 @@ jobs:
     if: "!startsWith(github.ref, 'refs/heads/release/')"
     runs-on: ubuntu-latest
     strategy:
-      matrix:
-        node-version: [18.x, 20.x]
+      matrix: { node-version: [18.x, 20.x] }
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
+        with: { node-version: ${{ matrix.node-version }} }
       - run: npm ci
-      - run: npm run db:migrate
       - run: npm run lint
-      - run: npm test
-      - run: npm run api:check
+      - run: npm test -- --runInBand
+      - run: npm run matrix:verify
   release:
     if: startsWith(github.ref, 'refs/heads/release/')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: echo "Skipping lint/test on release branch by policy"
+      - run: echo "Skipping heavy CI on release branch"

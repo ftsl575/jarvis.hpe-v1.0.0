@@ -38,3 +38,8 @@ coverage/
 *.mov
 *.mp3
 *.wav
+*.tar
+*.tar.gz
+*.tgz
+*.iso
+*.icns
