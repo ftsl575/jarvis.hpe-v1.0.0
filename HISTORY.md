@@ -7,6 +7,12 @@
 - Added Input Data batch processor for list1.txt with combined PartSurfer, PartSurfer Photo, and HPE Buy output.
 - Normalize PS/Photo/Buy parsers with table/caption extraction, selector cascade, empty-DOM not-found handling, SKU/URL normalisation, retries/throttling, JSON logs, and unified success criteria.
 
+## 2025-12-14 — Export and verification tooling
+- Added an `input.txt` → `output.xlsx` exporter with dry-run mode that skips live PartSurfer/BuyHPE fetches, disables AI keys, and records per-source descriptions alongside a summary sheet.
+- Wired strict-facts normalization through the unified AI adapter to select compliant descriptions when live fetches are enabled.
+- Introduced HDD matrix verification commands (`matrix:verify`, `matrix:stats`) to validate CSV reference data.
+- CI now runs lint, tests, matrix verification, and an exporter dry-run that uploads `output.xlsx`; binary hygiene is enforced via `.gitignore`, `.gitattributes`, and automatic sanitization workflows.
+
 ## 2025-10-25
 - feat(csv): add classify_sources.ps1 to normalize source labels and use semicolon delimiter
 - fix(source): improve source classification and batch conversion
