@@ -19,6 +19,13 @@ jobs:
       - run: npm run lint
       - run: npm test -- --runInBand
       - run: npm run matrix:verify
+      - name: Export sample input to xlsx (dry-run)
+        run: node scripts/export-from-input.js --in tests/data/sample-input.txt --out output.xlsx --dry-run
+      - name: Upload export workbook artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: export-output.xlsx
+          path: output.xlsx
   release:
     if: startsWith(github.ref, 'refs/heads/release/')
     runs-on: ubuntu-latest
