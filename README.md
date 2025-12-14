@@ -1,59 +1,56 @@
 # jarvis.hpe-v1.0.0
 
-HPE NameFill automation parser
+HPE NameFill / PartSurfer automation parser and tooling.
 
-## Scripts
+## Requirements
+- Node.js (LTS or newer)
+- Windows / PowerShell supported
 
-- `npm ci`
-- `npm test`
-- `npm run lint`
-- `npm run dq:report`
-- `npm run bench:parse`
-- `npm run matrix:verify`
-- `npm run matrix:stats`
-- `npm run export:xlsx`
-- `npm run export:xlsx:dry`
-
-### XLSX exporter
-
-- Place `input.txt` in the project root with one part number per line.
-- `npm run export:xlsx:dry` creates `output.xlsx` in the project root, skips live fetches, and clears AI keys to avoid LLM calls during the dry run.
-- `npm run export:xlsx` performs the same export with live PartSurfer/BuyHPE fetches enabled.
-
-### Repo hygiene
-
-- Generated workbooks such as `output.xlsx` are ignored and treated as binary assets via `.gitignore` and `.gitattributes`.
-- CI runs lint, tests, matrix verification, and an exporter dry-run that uploads `output.xlsx` as a workflow artifact.
-
-## Apps
-
-### hpe-partsurfer
-
-The `apps/hpe-partsurfer` directory contains a small utility that validates and normalizes HPE PartSurfer part numbers.
-
-#### Install dependencies
-
+## Installation
 ```bash
-cd apps/hpe-partsurfer
-npm install
+npm ci
 ```
 
-#### Run linting
+## Available Scripts
 
+### Core
 ```bash
+npm test
 npm run lint
 ```
 
-#### Run tests with coverage
-
+### Data quality and benchmarks
 ```bash
-npm test
+npm run dq:report
+npm run bench:parse
 ```
 
-#### Generate the sample CSV output
-
+### Matrix verification
 ```bash
-npm run sample
+npm run matrix:verify
+npm run matrix:stats
 ```
 
-The sample command reads from `sample_parts.txt` and produces `sample_results.csv` for quick smoke-testing.
+### XLSX Export
+```bash
+npm run export:xlsx
+npm run export:xlsx:dry
+```
+
+**Usage:**
+1. Place `input.txt` in the project root (one part number per line).
+2. Run:
+   ```bash
+   npm run export:xlsx:dry
+   ```
+3. The command generates `output.xlsx` in the project root.
+
+Dry-run mode does not call LLM providers and is intended for local and CI-safe verification.
+
+## Repository hygiene
+- Generated files such as `output.xlsx` must not be committed.
+- The repository includes rules to avoid committing binary artifacts.
+
+## Notes
+- The project focuses on transparent, verifiable parsing of HPE part data.
+- Documentation reflects only features present in the repository.
