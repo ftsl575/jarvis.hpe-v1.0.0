@@ -11,6 +11,7 @@ dist/
 coverage/
 .env
 # Binary and large assets
+output.xlsx
 *.pdf
 *.doc
 *.docx

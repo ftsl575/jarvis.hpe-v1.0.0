@@ -3,10 +3,17 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 const fs = require('fs');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const ExcelJS = require('exceljs');
 
 const DEFAULT_INPUT = 'input.txt';
 const DEFAULT_OUTPUT = 'output.xlsx';
+const EXPORT_RULES = ['Return the most relevant marketing description for the SKU using only provided facts.'];
+const FACT_SOURCE_LABELS = {
+  partsurfer: 'PartSurfer',
+  'buy.hpe.com': 'BuyHPE',
+  productBulletin: 'Product Bulletin'
+};
 
 function parseArgs(argv) {
   const parsed = { in: DEFAULT_INPUT, out: DEFAULT_OUTPUT, limit: undefined, dryRun: false };
@@ -37,10 +44,6 @@ function parseArgs(argv) {
   return parsed;
 }
 
-function normalizePn(value) {
-  return value.trim().toUpperCase().replace(/\s+/g, '');
-}
-
 function readInputLines(inputPath) {
   const content = fs.readFileSync(inputPath, 'utf8');
   return content
@@ -69,9 +72,9 @@ function createWorkbook() {
     { header: 'Source_ProductBulletin_title', key: 'Source_ProductBulletin_title', width: 30 },
     { header: 'Source_ProductBulletin_desc', key: 'Source_ProductBulletin_desc', width: 40 },
     { header: 'Chosen_description', key: 'Chosen_description', width: 40 },
-    { header: 'Description_quality', key: 'Description_quality', width: 15 },
+    { header: 'Description_quality', key: 'Description_quality', width: 20 },
     { header: 'Warehouse_ready', key: 'Warehouse_ready', width: 15 },
-    { header: 'Notes', key: 'Notes', width: 50 }
+    { header: 'Notes', key: 'Notes', width: 80 }
   ];
 
   const summarySheet = workbook.addWorksheet('unique_pn');
@@ -98,6 +101,103 @@ function selectChosenDescription(candidateDescriptions) {
   return { description: '', quality: 'REQUIRED' };
 }
 
+function disableLlmInDryRun() {
+  const openAi = process.env.OPENAI_API_KEY;
+  const deepSeek = process.env.DEEPSEEK_API_KEY;
+  if (!openAi && !deepSeek) {
+    return () => {};
+  }
+  if (openAi) {
+    process.env.OPENAI_API_KEY = '';
+  }
+  if (deepSeek) {
+    process.env.DEEPSEEK_API_KEY = '';
+  }
+  return () => {
+    if (openAi) {
+      process.env.OPENAI_API_KEY = openAi;
+    }
+    if (deepSeek) {
+      process.env.DEEPSEEK_API_KEY = deepSeek;
+    }
+  };
+}
+
+async function loadPartsModules() {
+  const baseDir = path.resolve(__dirname, '..', 'apps', 'hpe-partsurfer', 'src');
+  const indexUrl = pathToFileURL(path.join(baseDir, 'index.js')).href;
+  const fetchUrl = pathToFileURL(path.join(baseDir, 'fetchBuyHpe.js')).href;
+  const parseUrl = pathToFileURL(path.join(baseDir, 'parseBuyHpe.js')).href;
+
+  const [indexModule, fetchModule, parseModule] = await Promise.all([
+    import(indexUrl),
+    import(fetchUrl),
+    import(parseUrl)
+  ]);
+
+  return {
+    normalizePartNumber: indexModule.normalizePartNumber,
+    runForPart: indexModule.runForPart,
+    providerBuyHpe: indexModule.providerBuyHpe,
+    fetchBuyHpe: fetchModule.default ?? fetchModule.fetchBuyHpe,
+    parseBuyHpe: parseModule.default ?? parseModule.parseBuyHpe
+  };
+}
+
+function normalizeDescriptionValue(value) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '';
+  }
+  return trimmed.replace(/\s+/g, ' ');
+}
+
+async function fetchPartSurfer(normalized, modules, options, notes) {
+  if (options.dryRun) {
+    notes.push('partsurfer: dry-run');
+    return { title: '', desc: '' };
+  }
+
+  try {
+    const payload = await modules.runForPart(normalized, { live: true, retries: 1 });
+    return {
+      title: normalizeDescriptionValue(payload?.description ?? ''),
+      desc: normalizeDescriptionValue(payload?.description ?? '')
+    };
+  } catch (error) {
+    noteError(notes, 'partsurfer', error);
+    return { title: '', desc: '' };
+  }
+}
+
+async function fetchBuyHpe(normalized, modules, options, notes) {
+  if (options.dryRun) {
+    notes.push('buyhpe: dry-run');
+    return { title: '', desc: '' };
+  }
+
+  try {
+    const payload = await modules.providerBuyHpe(normalized, { live: true, retries: 1 });
+    return {
+      title: normalizeDescriptionValue(payload?.title ?? ''),
+      desc: normalizeDescriptionValue(
+        payload?.marketingDescription ?? payload?.description ?? payload?.shortDescription ?? ''
+      )
+    };
+  } catch (error) {
+    noteError(notes, 'buyhpe', error);
+    return { title: '', desc: '' };
+  }
+}
+
+async function fetchProductBulletin(normalized, notes) {
+  notes.push('product-bulletin: not available');
+  return { title: '', desc: '' };
+}
+
 let cachedStrictFactsNormalize = null;
 function loadStrictFactsNormalize() {
   if (cachedStrictFactsNormalize !== null) {
@@ -111,6 +211,44 @@ function loadStrictFactsNormalize() {
   return cachedStrictFactsNormalize;
 }
 
+function buildFactsMap(sources) {
+  const facts = [];
+  Object.entries(sources).forEach(([key, value]) => {
+    const label = FACT_SOURCE_LABELS[key] ?? key;
+    if (value.desc) {
+      facts.push({ source: label, description: value.desc });
+    }
+  });
+  return facts;
+}
+
+function summarizeDifferences(sources) {
+  const entries = Object.entries(sources)
+    .map(([key, value]) => ({ key, desc: value.desc }))
+    .filter((entry) => entry.desc);
+
+  if (entries.length <= 1) {
+    return '';
+  }
+
+  const unique = new Map();
+  entries.forEach((entry) => {
+    const normalized = entry.desc.toLowerCase();
+    if (!unique.has(normalized)) {
+      unique.set(normalized, []);
+    }
+    unique.get(normalized).push(entry.key);
+  });
+
+  if (unique.size <= 1) {
+    return 'sources aligned';
+  }
+
+  return Array.from(unique.entries())
+    .map(([desc, keys]) => `${keys.map((key) => FACT_SOURCE_LABELS[key] ?? key).join('/')}: ${desc}`)
+    .join(' || ');
+}
+
 async function chooseDescriptionWithStrictFacts({ pn, facts, notes }) {
   const strictFactsNormalize = loadStrictFactsNormalize();
   if (!strictFactsNormalize) {
@@ -122,7 +260,7 @@ async function chooseDescriptionWithStrictFacts({ pn, facts, notes }) {
     const response = await strictFactsNormalize({
       sku: pn,
       facts,
-      rules: ['Return the most relevant description for the SKU if available.']
+      rules: EXPORT_RULES
     });
 
     if (response && response.result && typeof response.result === 'object') {
@@ -130,8 +268,8 @@ async function chooseDescriptionWithStrictFacts({ pn, facts, notes }) {
       const possibleDescription = resultObject.description ?? resultObject.desc ?? resultObject.text;
       if (typeof possibleDescription === 'string' && possibleDescription.trim().length > 0) {
         return {
-          description: possibleDescription.trim(),
-          quality: 'EXACT'
+          description: normalizeDescriptionValue(possibleDescription),
+          quality: 'STRICT-FACTS'
         };
       }
     }
@@ -141,15 +279,17 @@ async function chooseDescriptionWithStrictFacts({ pn, facts, notes }) {
   return null;
 }
 
-async function collectRow(pn, options) {
-  const normalized = normalizePn(pn);
+async function collectRow(pn, modules, options) {
   const notes = [];
+  let normalizedPn = pn;
 
-  if (options.dryRun) {
-    notes.push('dry-run: sources skipped');
+  try {
+    normalizedPn = modules.normalizePartNumber(pn);
+  } catch (error) {
+    noteError(notes, 'normalize', error);
     return {
       PN: pn,
-      PN_normalized: normalized,
+      PN_normalized: '',
       Source_PartSurfer_title: '',
       Source_PartSurfer_desc: '',
       Source_BuyHPE_title: '',
@@ -157,46 +297,56 @@ async function collectRow(pn, options) {
       Source_ProductBulletin_title: '',
       Source_ProductBulletin_desc: '',
       Chosen_description: '',
-      Description_quality: 'REQUIRED',
+      Description_quality: 'INVALID',
       Warehouse_ready: 'NO',
       Notes: notes.join(' | ')
     };
   }
 
-  const facts = [];
-  const partSurfer = { title: '', desc: '' };
-  const buyHpe = { title: '', desc: '' };
-  const productBulletin = { title: '', desc: '' };
+  const restoreEnv = options.dryRun ? disableLlmInDryRun() : () => {};
+  try {
+    const partSurfer = await fetchPartSurfer(normalizedPn, modules, options, notes);
+    const buyHpe = await fetchBuyHpe(normalizedPn, modules, options, notes);
+    const productBulletin = await fetchProductBulletin(normalizedPn, notes);
 
-  const strictFactsResult = await chooseDescriptionWithStrictFacts({
-    pn: normalized,
-    facts,
-    notes
-  });
+    const sources = {
+      partsurfer: partSurfer,
+      'buy.hpe.com': buyHpe,
+      productBulletin
+    };
 
-  const candidateDescriptions = [
-    partSurfer.desc,
-    buyHpe.desc,
-    productBulletin.desc,
-    strictFactsResult?.description
-  ];
+    const facts = buildFactsMap(sources);
+    const strictFactsResult = options.dryRun ? null : await chooseDescriptionWithStrictFacts({
+      pn: normalizedPn,
+      facts,
+      notes
+    });
 
-  const chosen = strictFactsResult ?? selectChosenDescription(candidateDescriptions);
+    const candidateDescriptions = [partSurfer.desc, buyHpe.desc, productBulletin.desc, strictFactsResult?.description];
+    const chosen = strictFactsResult ?? selectChosenDescription(candidateDescriptions);
+    const diffSummary = summarizeDifferences(sources);
 
-  return {
-    PN: pn,
-    PN_normalized: normalized,
-    Source_PartSurfer_title: partSurfer.title,
-    Source_PartSurfer_desc: partSurfer.desc,
-    Source_BuyHPE_title: buyHpe.title,
-    Source_BuyHPE_desc: buyHpe.desc,
-    Source_ProductBulletin_title: productBulletin.title,
-    Source_ProductBulletin_desc: productBulletin.desc,
-    Chosen_description: chosen.description ?? '',
-    Description_quality: chosen.quality ?? 'REQUIRED',
-    Warehouse_ready: chosen.description ? 'YES' : 'NO',
-    Notes: notes.join(' | ')
-  };
+    if (diffSummary) {
+      notes.push(`diff: ${diffSummary}`);
+    }
+
+    return {
+      PN: pn,
+      PN_normalized: normalizedPn,
+      Source_PartSurfer_title: partSurfer.title,
+      Source_PartSurfer_desc: partSurfer.desc,
+      Source_BuyHPE_title: buyHpe.title,
+      Source_BuyHPE_desc: buyHpe.desc,
+      Source_ProductBulletin_title: productBulletin.title,
+      Source_ProductBulletin_desc: productBulletin.desc,
+      Chosen_description: chosen.description ?? '',
+      Description_quality: chosen.quality ?? 'REQUIRED',
+      Warehouse_ready: chosen.description ? 'YES' : 'NO',
+      Notes: notes.join(' | ')
+    };
+  } finally {
+    restoreEnv();
+  }
 }
 
 async function writeSummarySheet(sheet, records) {
@@ -227,14 +377,14 @@ async function run() {
 
   const lines = readInputLines(inputPath);
   const limitedLines = typeof options.limit === 'number' ? lines.slice(0, options.limit) : lines;
-
+  const modules = await loadPartsModules();
   const { workbook, inputSheet, summarySheet } = createWorkbook();
 
   const records = [];
   // eslint-disable-next-line no-restricted-syntax
   for (const pn of limitedLines) {
     // eslint-disable-next-line no-await-in-loop
-    const record = await collectRow(pn, options);
+    const record = await collectRow(pn, modules, options);
     records.push(record);
     inputSheet.addRow(record);
   }
